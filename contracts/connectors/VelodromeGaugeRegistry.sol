@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../ConnectorRegistry.sol";
-import "./AerodromeGaugeConnector.sol";
-import "./VelodromeSlipstreamGaugeConnector.sol";
-import { IGaugeRegistryVoter } from "./GaugeRegistry.sol";
+import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { AerodromeGaugeConnector } from
+    "contracts/connectors/AerodromeGaugeConnector.sol";
+import { VelodromeSlipstreamGaugeConnector } from
+    "contracts/connectors/VelodromeSlipstreamGaugeConnector.sol";
+import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
 
 interface IPairFactory {
     function isPair(address pair) external view returns (bool);

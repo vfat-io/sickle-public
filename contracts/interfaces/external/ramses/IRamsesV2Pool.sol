@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity >=0.5.0;
 
-import "./IRamsesV2PoolImmutables.sol";
-import "./IRamsesV2PoolState.sol";
+import { IRamsesV2PoolImmutables } from
+    "contracts/interfaces/external/ramses/IRamsesV2PoolImmutables.sol";
+import { IRamsesV2PoolState } from
+    "contracts/interfaces/external/ramses/IRamsesV2PoolState.sol";
 
 /// @title The interface for a Ramses V2 Pool
 /// @notice A Ramses pool facilitates swapping and automated market making

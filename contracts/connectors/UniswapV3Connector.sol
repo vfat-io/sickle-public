@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/uniswap/INonfungiblePositionManager.sol";
-import "../interfaces/external/uniswap/ISwapRouter.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { INonfungiblePositionManager } from
+    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
+import { ISwapRouter } from
+    "contracts/interfaces/external/uniswap/ISwapRouter.sol";
 
 struct UniswapV3AddLiquidityExtraData {
     int24 tickLower;

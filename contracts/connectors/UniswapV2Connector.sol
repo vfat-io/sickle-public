@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/uniswap/IUniswapV2Router02.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { IUniswapV2Router02 } from
+    "contracts/interfaces/external/uniswap/IUniswapV2Router02.sol";
 
 struct UniswapV2SwapExtraData {
     address[] path;

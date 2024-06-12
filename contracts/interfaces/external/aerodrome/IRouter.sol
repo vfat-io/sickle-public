@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/interfaces/IERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 interface IWETH is IERC20 {
     function deposit() external payable;
@@ -47,10 +47,12 @@ interface IRouter {
     /// @notice Address of Voter.sol
     function voter() external view returns (address);
 
-    /// @notice Interface of WETH contract used for WETH => ETH wrapping/unwrapping
+    /// @notice Interface of WETH contract used for WETH => ETH
+    /// wrapping/unwrapping
     function weth() external view returns (IWETH);
 
-    /// @dev Represents Ether. Used by zapper to determine whether to return assets as ETH/WETH.
+    /// @dev Represents Ether. Used by zapper to determine whether to return
+    /// assets as ETH/WETH.
     function ETHER() external view returns (address);
 
     /// @dev Struct containing information necessary to zap in and out of pools
@@ -58,10 +60,14 @@ interface IRouter {
     /// @param tokenB           .
     /// @param stable           Stable or volatile pool
     /// @param factory          factory of pool
-    /// @param amountOutMinA    Minimum amount expected from swap leg of zap via routesA
-    /// @param amountOutMinB    Minimum amount expected from swap leg of zap via routesB
-    /// @param amountAMin       Minimum amount of tokenA expected from liquidity leg of zap
-    /// @param amountBMin       Minimum amount of tokenB expected from liquidity leg of zap
+    /// @param amountOutMinA    Minimum amount expected from swap leg of zap via
+    /// routesA
+    /// @param amountOutMinB    Minimum amount expected from swap leg of zap via
+    /// routesB
+    /// @param amountAMin       Minimum amount of tokenA expected from liquidity
+    /// leg of zap
+    /// @param amountBMin       Minimum amount of tokenB expected from liquidity
+    /// leg of zap
     struct Zap {
         address tokenA;
         address tokenB;
@@ -78,10 +84,14 @@ interface IRouter {
     /// @param tokenB   Address of token to sort
     /// @return token0  Lower address value between tokenA and tokenB
     /// @return token1  Higher address value between tokenA and tokenB
-    function sortTokens(address tokenA, address tokenB) external pure returns (address token0, address token1);
+    function sortTokens(
+        address tokenA,
+        address tokenB
+    ) external pure returns (address token0, address token1);
 
     /// @notice Calculate the address of a pool by its' factory.
-    ///         Used by all Router functions containing a `Route[]` or `_factory` argument.
+    ///         Used by all Router functions containing a `Route[]` or
+    /// `_factory` argument.
     ///         Reverts if _factory is not approved by the FactoryRegistry
     /// @dev Returns a randomly generated address for a nonexistent pool
     /// @param tokenA   Address of token to query
@@ -110,7 +120,10 @@ interface IRouter {
     ) external view returns (uint256 reserveA, uint256 reserveB);
 
     /// @notice Perform chained getAmountOut calculations on any number of pools
-    function getAmountsOut(uint256 amountIn, Route[] memory routes) external view returns (uint256[] memory amounts);
+    function getAmountsOut(
+        uint256 amountIn,
+        Route[] memory routes
+    ) external view returns (uint256[] memory amounts);
 
     // **** ADD LIQUIDITY ****
 
@@ -131,7 +144,10 @@ interface IRouter {
         address _factory,
         uint256 amountADesired,
         uint256 amountBDesired
-    ) external view returns (uint256 amountA, uint256 amountB, uint256 liquidity);
+    )
+        external
+        view
+        returns (uint256 amountA, uint256 amountB, uint256 liquidity);
 
     /// @notice Quote the amount of liquidity removed from a Pool
     /// @param tokenA       .
@@ -184,7 +200,8 @@ interface IRouter {
     /// @param deadline             Deadline to add liquidity
     /// @return amountToken         Amount of token to actually deposit
     /// @return amountETH           Amount of tokenETH to actually deposit
-    /// @return liquidity           Amount of liquidity token returned from deposit
+    /// @return liquidity           Amount of liquidity token returned from
+    /// deposit
     function addLiquidityETH(
         address token,
         bool stable,
@@ -193,7 +210,10 @@ interface IRouter {
         uint256 amountETHMin,
         address to,
         uint256 deadline
-    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
+    )
+        external
+        payable
+        returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
 
     // **** REMOVE LIQUIDITY ****
 
@@ -219,7 +239,8 @@ interface IRouter {
         uint256 deadline
     ) external returns (uint256 amountA, uint256 amountB);
 
-    /// @notice Remove liquidity of a token and WETH (returned as ETH) from a Pool
+    /// @notice Remove liquidity of a token and WETH (returned as ETH) from a
+    /// Pool
     /// @param token            .
     /// @param stable           True if pool is stable, false if volatile
     /// @param liquidity        Amount of liquidity to remove
@@ -239,7 +260,8 @@ interface IRouter {
         uint256 deadline
     ) external returns (uint256 amountToken, uint256 amountETH);
 
-    /// @notice Remove liquidity of a fee-on-transfer token and WETH (returned as ETH) from a Pool
+    /// @notice Remove liquidity of a fee-on-transfer token and WETH (returned
+    /// as ETH) from a Pool
     /// @param token            .
     /// @param stable           True if pool is stable, false if volatile
     /// @param liquidity        Amount of liquidity to remove
@@ -343,7 +365,8 @@ interface IRouter {
         uint256 deadline
     ) external payable;
 
-    /// @notice Swap a token for WETH (returned as ETH) supporting fee-on-transfer tokens
+    /// @notice Swap a token for WETH (returned as ETH) supporting
+    /// fee-on-transfer tokens
     /// @param amountIn     Amount of token in
     /// @param amountOutMin Minimum amount of desired ETH
     /// @param routes       Array of trade routes used in the swap
@@ -358,7 +381,8 @@ interface IRouter {
     ) external;
 
     /// @notice Zap a token A into a pool (B, C). (A can be equal to B or C).
-    ///         Supports standard ERC20 tokens only (i.e. not fee-on-transfer tokens etc).
+    ///         Supports standard ERC20 tokens only (i.e. not fee-on-transfer
+    /// tokens etc).
     ///         Slippage is required for the initial swap.
     ///         Additional slippage may be required when adding liquidity as the
     ///         price of the token may have changed.
@@ -383,7 +407,8 @@ interface IRouter {
     ) external payable returns (uint256 liquidity);
 
     /// @notice Zap out a pool (B, C) into A.
-    ///         Supports standard ERC20 tokens only (i.e. not fee-on-transfer tokens etc).
+    ///         Supports standard ERC20 tokens only (i.e. not fee-on-transfer
+    /// tokens etc).
     ///         Slippage is required for the removal of liquidity.
     ///         Additional slippage may be required on the swap as the
     ///         price of the token may have changed.
@@ -402,20 +427,27 @@ interface IRouter {
 
     /// @notice Used to generate params required for zapping in.
     ///         Zap in => remove liquidity then swap.
-    ///         Apply slippage to expected swap values to account for changes in reserves in between.
+    ///         Apply slippage to expected swap values to account for changes in
+    /// reserves in between.
     /// @dev Output token refers to the token you want to zap in from.
     /// @param tokenA           .
     /// @param tokenB           .
     /// @param stable           .
     /// @param _factory         .
-    /// @param amountInA        Amount of input token you wish to send down routesA
-    /// @param amountInB        Amount of input token you wish to send down routesB
+    /// @param amountInA        Amount of input token you wish to send down
+    /// routesA
+    /// @param amountInB        Amount of input token you wish to send down
+    /// routesB
     /// @param routesA          Route used to convert input token to tokenA
     /// @param routesB          Route used to convert input token to tokenB
-    /// @return amountOutMinA   Minimum output expected from swapping input token to tokenA.
-    /// @return amountOutMinB   Minimum output expected from swapping input token to tokenB.
-    /// @return amountAMin      Minimum amount of tokenA expected from depositing liquidity.
-    /// @return amountBMin      Minimum amount of tokenB expected from depositing liquidity.
+    /// @return amountOutMinA   Minimum output expected from swapping input
+    /// token to tokenA.
+    /// @return amountOutMinB   Minimum output expected from swapping input
+    /// token to tokenB.
+    /// @return amountAMin      Minimum amount of tokenA expected from
+    /// depositing liquidity.
+    /// @return amountBMin      Minimum amount of tokenB expected from
+    /// depositing liquidity.
     function generateZapInParams(
         address tokenA,
         address tokenB,
@@ -425,23 +457,37 @@ interface IRouter {
         uint256 amountInB,
         Route[] calldata routesA,
         Route[] calldata routesB
-    ) external view returns (uint256 amountOutMinA, uint256 amountOutMinB, uint256 amountAMin, uint256 amountBMin);
+    )
+        external
+        view
+        returns (
+            uint256 amountOutMinA,
+            uint256 amountOutMinB,
+            uint256 amountAMin,
+            uint256 amountBMin
+        );
 
     /// @notice Used to generate params required for zapping out.
     ///         Zap out => swap then add liquidity.
-    ///         Apply slippage to expected liquidity values to account for changes in reserves in between.
+    ///         Apply slippage to expected liquidity values to account for
+    /// changes in reserves in between.
     /// @dev Output token refers to the token you want to zap out of.
     /// @param tokenA           .
     /// @param tokenB           .
     /// @param stable           .
     /// @param _factory         .
-    /// @param liquidity        Amount of liquidity being zapped out of into a given output token.
+    /// @param liquidity        Amount of liquidity being zapped out of into a
+    /// given output token.
     /// @param routesA          Route used to convert tokenA into output token.
     /// @param routesB          Route used to convert tokenB into output token.
-    /// @return amountOutMinA   Minimum output expected from swapping tokenA into output token.
-    /// @return amountOutMinB   Minimum output expected from swapping tokenB into output token.
-    /// @return amountAMin      Minimum amount of tokenA expected from withdrawing liquidity.
-    /// @return amountBMin      Minimum amount of tokenB expected from withdrawing liquidity.
+    /// @return amountOutMinA   Minimum output expected from swapping tokenA
+    /// into output token.
+    /// @return amountOutMinB   Minimum output expected from swapping tokenB
+    /// into output token.
+    /// @return amountAMin      Minimum amount of tokenA expected from
+    /// withdrawing liquidity.
+    /// @return amountBMin      Minimum amount of tokenB expected from
+    /// withdrawing liquidity.
     function generateZapOutParams(
         address tokenA,
         address tokenB,
@@ -450,11 +496,21 @@ interface IRouter {
         uint256 liquidity,
         Route[] calldata routesA,
         Route[] calldata routesB
-    ) external view returns (uint256 amountOutMinA, uint256 amountOutMinB, uint256 amountAMin, uint256 amountBMin);
+    )
+        external
+        view
+        returns (
+            uint256 amountOutMinA,
+            uint256 amountOutMinB,
+            uint256 amountAMin,
+            uint256 amountBMin
+        );
 
-    /// @notice Used by zapper to determine appropriate ratio of A to B to deposit liquidity. Assumes stable pool.
+    /// @notice Used by zapper to determine appropriate ratio of A to B to
+    /// deposit liquidity. Assumes stable pool.
     /// @dev Returns stable liquidity ratio of B to (A + B).
-    ///      E.g. if ratio is 0.4, it means there is more of A than there is of B.
+    ///      E.g. if ratio is 0.4, it means there is more of A than there is of
+    /// B.
     ///      Therefore you should deposit more of token A than B.
     /// @param tokenA   tokenA of stable pool you are zapping into.
     /// @param tokenB   tokenB of stable pool you are zapping into.

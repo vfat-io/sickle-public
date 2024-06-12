@@ -6,7 +6,7 @@ interface IFlashloanCallback {
 
     /// @notice Callback function for flashloan_withdraw()
     /// Repays the loaned amount, withdraws collateral and repays the flashloan
-    function flashloan_withdraw_callback(
+    function flashloanWithdrawCallback(
         address[] calldata assets,
         uint256[] calldata amounts,
         uint256[] calldata premiums,
@@ -17,7 +17,7 @@ interface IFlashloanCallback {
     /// Optionally swaps the flashloan for the collateral asset,
     /// supplies the loaned amount,
     /// borrows from the debt market (plus fee) to repay the flashloan
-    function flashloan_deposit_callback(
+    function flashloanDepositCallback(
         address[] calldata assets,
         uint256[] calldata amounts,
         uint256[] calldata premiums,

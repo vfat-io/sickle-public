@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
-import "./Curve2TokenConnector.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
 
 interface ICurveDepositor3 {
     function add_liquidity(

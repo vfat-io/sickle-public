@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/IFarmConnector.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface ICurveDepositToken {
     function PRISMA() external view returns (IERC20);

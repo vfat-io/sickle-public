@@ -1,24 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./interfaces/external/uniswap/INonfungiblePositionManager.sol";
-import "./Sickle.sol";
+import { INonfungiblePositionManager } from
+    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
+import { Sickle } from "contracts/Sickle.sol";
+import {
+    IRebalanceRegistry,
+    RebalanceKey,
+    RebalanceConfig
+} from "./interfaces/IRebalanceRegistry.sol";
 
-struct RebalanceKey {
-    Sickle sickle;
-    INonfungiblePositionManager nftManager;
-    uint256 tokenId;
-}
-
-struct RebalanceConfig {
-    int24 tickLow;
-    int24 tickHigh;
-    uint256 slippageBP;
-    int24 minTickLow;
-    int24 maxTickHigh;
-}
-
-abstract contract RebalanceRegistry {
+abstract contract RebalanceRegistry is IRebalanceRegistry {
     error InvalidTickRange();
     error InvalidMinMaxTickRange();
     error InvalidTickLow();

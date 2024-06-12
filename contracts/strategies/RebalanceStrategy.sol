@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../Sickle.sol";
-import "../RebalanceRegistry.sol";
-import "./modules/TransferModule.sol";
-import "./modules/ZapModule.sol";
-import "../interfaces/IFarmConnector.sol";
-import "../interfaces/external/uniswap/IUniswapV3Pool.sol";
-import "../interfaces/external/uniswap/INonfungiblePositionManager.sol";
+import {
+    RebalanceConfig,
+    RebalanceKey,
+    NftInfo,
+    IRebalanceRegistry
+} from "contracts/interfaces/IRebalanceRegistry.sol";
+import { RebalanceRegistry } from "contracts/RebalanceRegistry.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import {
+    IUniswapV3Pool,
+    IUniswapV3PoolState,
+    IUniswapV3PoolImmutables
+} from "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
+import { INonfungiblePositionManager } from
+    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
+import { StrategyModule } from "contracts/modules/StrategyModule.sol";
+import { ZapLib, ZapInData, ZapOutData } from "contracts/libraries/ZapLib.sol";
+import { FeesLib } from "contracts/libraries/FeesLib.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import { RebalanceLib } from "contracts/libraries/RebalanceLib.sol";
+import { SwapData } from "contracts/interfaces/ILiquidityConnector.sol";
+import { SickleFactory } from "contracts/SickleFactory.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { Sickle } from "contracts/Sickle.sol";
 
 library RebalanceStrategyFees {
     bytes4 constant HarvestFor = bytes4(keccak256("RebalanceHarvestForFee"));
@@ -16,29 +33,23 @@ library RebalanceStrategyFees {
     bytes4 constant RebalanceHigh = bytes4(keccak256("RebalanceHighFee"));
 }
 
-contract RebalanceStrategy is TransferModule, ZapModule, RebalanceRegistry {
+contract RebalanceStrategy is RebalanceRegistry, StrategyModule {
     error TokenOutRequired();
     error TickWithinRange();
     error TickOutsideMaxRange();
-
-    struct NftInfo {
-        IUniswapV3Pool pool;
-        INonfungiblePositionManager nftManager;
-        uint256 tokenId;
-    }
 
     struct DepositParams {
         address stakingContractAddress;
         address[] tokensIn;
         uint256[] amountsIn;
-        ZapModule.ZapInData zapData;
+        ZapInData zapData;
         bytes extraData;
     }
 
     struct WithdrawParams {
         address stakingContractAddress;
         bytes extraData;
-        ZapModule.ZapOutData zapData;
+        ZapOutData zapData;
         address[] tokensOut;
     }
 
@@ -49,15 +60,30 @@ contract RebalanceStrategy is TransferModule, ZapModule, RebalanceRegistry {
         address[] tokensOut;
     }
 
-    address public immutable rebalanceStrategy;
+    struct Libraries {
+        ZapLib zapLib;
+        FeesLib feesLib;
+        TransferLib transferLib;
+        RebalanceLib rebalanceLib;
+    }
+
+    ZapLib public immutable zapLib;
+    FeesLib public immutable feesLib;
+    TransferLib public immutable transferLib;
+    RebalanceLib public immutable rebalanceLib;
+
+    address public immutable strategyAddress;
 
     constructor(
         SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
-        ConnectorRegistry connectorRegistry
-    ) ZapModule(factory, feesLib, wrappedNativeAddress, connectorRegistry) {
-        rebalanceStrategy = address(this);
+        ConnectorRegistry connectorRegistry,
+        Libraries memory libraries
+    ) StrategyModule(factory, connectorRegistry) {
+        strategyAddress = address(this);
+        zapLib = libraries.zapLib;
+        feesLib = libraries.feesLib;
+        transferLib = libraries.transferLib;
+        rebalanceLib = libraries.rebalanceLib;
     }
 
     /* External functions */
@@ -118,11 +144,11 @@ contract RebalanceStrategy is TransferModule, ZapModule, RebalanceRegistry {
             (harvestParams.stakingContractAddress, harvestParams.extraData)
         );
 
-        targets[1] = address(this);
+        targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 RebalanceStrategyFees.HarvestFor,
                 harvestParams.tokensOut
             )
@@ -139,26 +165,27 @@ contract RebalanceStrategy is TransferModule, ZapModule, RebalanceRegistry {
             )
         );
 
-        targets[3] = address(this);
-        data[3] =
-            abi.encodeCall(ZapModule._sickle_zap_out, (withdrawParams.zapData));
+        targets[3] = address(zapLib);
+        data[3] = abi.encodeCall(ZapLib.zapOut, (withdrawParams.zapData));
 
-        targets[4] = address(this);
+        targets[4] = address(feesLib);
         data[4] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 _get_rebalance_fee(nftInfo.pool),
                 withdrawParams.tokensOut
             )
         );
 
-        targets[5] = address(this);
-        data[5] =
-            abi.encodeCall(ZapModule._sickle_zap_in, (depositParams.zapData));
+        targets[5] = address(zapLib);
+        data[5] = abi.encodeCall(ZapLib.zapIn, (depositParams.zapData));
 
-        targets[6] = address(this);
-        data[6] = abi.encodeCall(this._sickle_reset_rebalance_config, (nftInfo));
+        targets[6] = address(rebalanceLib);
+        data[6] = abi.encodeCall(
+            RebalanceLib.resetRebalanceConfig,
+            (IRebalanceRegistry(strategyAddress), nftInfo)
+        );
 
         targets[7] =
             connectorRegistry.connectorOf(depositParams.stakingContractAddress);
@@ -171,48 +198,13 @@ contract RebalanceStrategy is TransferModule, ZapModule, RebalanceRegistry {
             )
         );
 
-        targets[8] = address(this);
-        data[8] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+        if (sweepTokens.length > 0) {
+            targets[8] = address(transferLib);
+            data[8] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
 
         sickle.multicall(targets, data);
-    }
-
-    /* Delegate functions */
-
-    function _sickle_reset_rebalance_config(NftInfo calldata nftInfo)
-        external
-        onlyRegisteredSickle
-    {
-        RebalanceKey memory key = RebalanceKey(
-            Sickle(payable(address(this))), nftInfo.nftManager, nftInfo.tokenId
-        );
-        RebalanceConfig memory config =
-            RebalanceStrategy(rebalanceStrategy).getRebalanceConfig(key);
-
-        INonfungiblePositionManager nftManager =
-            INonfungiblePositionManager(key.nftManager);
-
-        uint256 newTokenId = nftManager.tokenOfOwnerByIndex(
-            address(this), nftManager.balanceOf(address(this)) - 1
-        );
-
-        (,,,,, int24 tickLower, int24 tickUpper,,,,,) =
-            nftManager.positions(newTokenId);
-
-        int24 midTick = (tickUpper + tickLower) / 2;
-
-        int24 midRange = (config.tickHigh - config.tickLow) / 2;
-
-        config.tickLow = midTick - midRange;
-        config.tickHigh = midTick + midRange;
-
-        RebalanceKey memory newKey =
-            RebalanceKey(key.sickle, key.nftManager, newTokenId);
-
-        RebalanceStrategy(rebalanceStrategy).resetRebalanceConfig(
-            key, newKey, config
-        );
     }
 
     /* Internal functions */

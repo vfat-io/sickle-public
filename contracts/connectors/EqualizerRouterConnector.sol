@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/equalizer/IEqualizerRouter.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { IEqualizerRouter } from
+    "contracts/interfaces/external/equalizer/IEqualizerRouter.sol";
 
 struct EqualizerLiquidityExtraData {
     bool isStablePool;

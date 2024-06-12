@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity ^0.8.10;
 
-import "./ComptrollerInterface.sol";
-import "./InterestRateModel.sol";
-import "./EIP20NonStandardInterface.sol";
-import "./ErrorReporter.sol";
+import { ComptrollerInterface } from
+    "contracts/interfaces/external/compound-v2/ComptrollerInterface.sol";
+import { InterestRateModel } from
+    "contracts/interfaces/external/compound-v2/InterestRateModel.sol";
+import { EIP20NonStandardInterface } from
+    "contracts/interfaces/external/compound-v2/EIP20NonStandardInterface.sol";
 
 contract CTokenStorage {
     /**
@@ -256,7 +258,6 @@ abstract contract CTokenInterface is CTokenStorage {
     /**
      * User Interface **
      */
-
     function transfer(
         address dst,
         uint256 amount
@@ -325,7 +326,6 @@ abstract contract CTokenInterface is CTokenStorage {
     /**
      * Admin Functions **
      */
-
     function _setPendingAdmin(address payable newPendingAdmin)
         external
         virtual
@@ -365,7 +365,6 @@ abstract contract CErc20Interface is CErc20Storage {
     /**
      * User Interface **
      */
-
     function mint(uint256 mintAmount) external virtual returns (uint256);
 
     function redeem(uint256 redeemTokens) external virtual returns (uint256);
@@ -398,7 +397,6 @@ abstract contract CErc20Interface is CErc20Storage {
     /**
      * Admin Functions **
      */
-
     function _addReserves(uint256 addAmount)
         external
         virtual

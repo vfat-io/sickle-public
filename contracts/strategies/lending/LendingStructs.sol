@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { SwapData } from "../modules/SwapModule.sol";
-import { ZapModule } from "../modules/ZapModule.sol";
+import { SwapData } from "contracts/libraries/SwapLib.sol";
 
 library LendingStrategyFees {
     bytes4 constant Deposit = bytes4(keccak256("LendingStrategyDepositFee"));

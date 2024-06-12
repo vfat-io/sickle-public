@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
+import { IERC20 } from
+    "lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-import "./FlashloanStrategy.sol";
-import "./modules/ZapModule.sol";
-import "../interfaces/ILendingConnector.sol";
+import { FlashloanStrategy } from "contracts/strategies/FlashloanStrategy.sol";
+import { ILendingConnector } from "contracts/interfaces/ILendingConnector.sol";
+import {
+    StrategyModule,
+    SickleFactory,
+    Sickle
+} from "contracts/modules/StrategyModule.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { DelegateModule } from "contracts/modules/DelegateModule.sol";
+import { FeesLib } from "contracts/libraries/FeesLib.sol";
 
 struct MigratePositionParams {
     address sickleAddress;
@@ -17,17 +26,18 @@ library LendingMigratorFees {
     bytes4 constant Flashloan = bytes4(keccak256("LendingMigratorFlashloanFee"));
 }
 
-contract LendingMigrator is ZapModule {
+contract LendingMigrator is StrategyModule, DelegateModule {
     FlashloanStrategy public immutable flashloanStrategy;
+    FeesLib public immutable feesLib;
 
     constructor(
         SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
         ConnectorRegistry connectorRegistry,
-        FlashloanStrategy flashloanStrategy_
-    ) ZapModule(factory, feesLib, wrappedNativeAddress, connectorRegistry) {
+        FlashloanStrategy flashloanStrategy_,
+        FeesLib feesLib_
+    ) StrategyModule(factory, connectorRegistry) {
         flashloanStrategy = flashloanStrategy_;
+        feesLib = feesLib_;
     }
 
     /// @notice Uses a flash loan to repay a user's loan,
@@ -41,9 +51,7 @@ contract LendingMigrator is ZapModule {
         address[] calldata flashloanAssets,
         uint256[] calldata flashloanAmounts
     ) public {
-        Sickle sickle = Sickle(
-            payable(factory.getOrDeploy(msg.sender, approved, referralCode))
-        );
+        Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
 
         flashloan_repay_for(
             address(sickle),
@@ -59,7 +67,7 @@ contract LendingMigrator is ZapModule {
 
     /// @notice Callback function for flashloan_repay_for()
     /// Repays a user's loan with a flashloan
-    function flashloan_repay_for_callback(
+    function flashloanRepayForCallback(
         address[] calldata assets,
         uint256[] calldata amounts,
         uint256[] calldata premiums,
@@ -75,12 +83,17 @@ contract LendingMigrator is ZapModule {
         uint256 assetIndex = amounts[0] > 0 ? 0 : 1;
 
         // charge flashloan fees
-        _charge_fees(
-            keccak256(
-                abi.encodePacked(params.strategy, LendingMigratorFees.Flashloan)
-            ),
-            assets[assetIndex],
-            amounts[assetIndex]
+        _delegateTo(
+            address(feesLib),
+            abi.encodeCall(
+                FeesLib.chargeFee,
+                (
+                    params.strategy,
+                    LendingMigratorFees.Flashloan,
+                    assets[assetIndex],
+                    amounts[assetIndex]
+                )
+            )
         );
 
         _delegateTo(
@@ -141,7 +154,7 @@ contract LendingMigrator is ZapModule {
         });
 
         bytes memory encoded = abi.encodeCall(
-            this.flashloan_repay_for_callback,
+            this.flashloanRepayForCallback,
             (
                 flashloanAssets,
                 flashloanAmounts,

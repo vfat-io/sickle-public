@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./MasterChefConnector.sol";
+import { IERC20 } from
+    "lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import { SafeTransferLib } from "lib/solmate/src/utils/SafeTransferLib.sol";
+import {
+    MasterChefConnector,
+    MasterChefExtraData,
+    IMasterChef
+} from "contracts/connectors/MasterChefConnector.sol";
 
 contract MasterChefWithReferrerConnector is MasterChefConnector {
     constructor() { }

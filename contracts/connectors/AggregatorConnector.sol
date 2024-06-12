@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
 
 struct AggregatorExtraData {
     bytes data;

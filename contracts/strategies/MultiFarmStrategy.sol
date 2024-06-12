@@ -1,24 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../Sickle.sol";
-import "./modules/TransferModule.sol";
-import "./modules/ZapModule.sol";
-import "../interfaces/IFarmConnector.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import {
+    StrategyModule,
+    SickleFactory,
+    Sickle
+} from "contracts/modules/StrategyModule.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { ZapLib, ZapInData } from "contracts/libraries/ZapLib.sol";
+import { FeesLib } from "contracts/libraries/FeesLib.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import { SwapLib } from "contracts/libraries/SwapLib.sol";
+import { SwapData } from "contracts/interfaces/ILiquidityConnector.sol";
 
 library MultiFarmStrategyFees {
     bytes4 constant Harvest = bytes4(keccak256("FarmHarvestFee"));
     bytes4 constant Compound = bytes4(keccak256("FarmCompoundFee"));
 }
 
-contract MultiFarmStrategy is TransferModule, ZapModule {
-    constructor(
-        SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
-        ConnectorRegistry connectorRegistry
-    ) ZapModule(factory, feesLib, wrappedNativeAddress, connectorRegistry) { }
-
+contract MultiFarmStrategy is StrategyModule {
     struct ClaimParams {
         address claimContractAddress;
         bytes claimExtraData;
@@ -27,7 +28,7 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
     struct CompoundParams {
         ClaimParams[] claimParams;
         address[] rewardTokens;
-        ZapModule.ZapInData zapData;
+        ZapInData zapData;
         address depositContractAddress;
         bytes depositExtraData;
     }
@@ -36,6 +37,32 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
         ClaimParams[] claimParams;
         SwapData[] swaps;
         address[] tokensOut;
+    }
+
+    struct Libraries {
+        TransferLib transferLib;
+        SwapLib swapLib;
+        FeesLib feesLib;
+        ZapLib zapLib;
+    }
+
+    TransferLib public immutable transferLib;
+    SwapLib public immutable swapLib;
+    FeesLib public immutable feesLib;
+    ZapLib public immutable zapLib;
+
+    address public immutable strategyAddress;
+
+    constructor(
+        SickleFactory factory,
+        ConnectorRegistry connectorRegistry,
+        Libraries memory libraries
+    ) StrategyModule(factory, connectorRegistry) {
+        strategyAddress = address(this);
+        transferLib = libraries.transferLib;
+        swapLib = libraries.swapLib;
+        feesLib = libraries.feesLib;
+        zapLib = libraries.zapLib;
     }
 
     function compoundMultiple(
@@ -48,8 +75,9 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
         address[] memory targets = new address[](arrayLength);
         bytes[] memory data = new bytes[](arrayLength);
 
-        uint256 i = 0;
-        for (; i < params.claimParams.length; i++) {
+        uint256 i;
+        uint256 length = params.claimParams.length;
+        for (; i < length;) {
             ClaimParams calldata claimParams = params.claimParams[i];
             address farmConnector =
                 connectorRegistry.connectorOf(claimParams.claimContractAddress);
@@ -59,16 +87,24 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
                 IFarmConnector.claim,
                 (claimParams.claimContractAddress, claimParams.claimExtraData)
             );
+
+            unchecked {
+                i++;
+            }
         }
 
-        targets[i] = address(this);
+        targets[i] = address(feesLib);
         data[i] = abi.encodeCall(
-            this._sickle_charge_fees,
-            (address(this), MultiFarmStrategyFees.Compound, params.rewardTokens)
+            FeesLib.chargeFees,
+            (
+                strategyAddress,
+                MultiFarmStrategyFees.Compound,
+                params.rewardTokens
+            )
         );
 
-        targets[i + 1] = address(this);
-        data[i + 1] = abi.encodeCall(ZapModule._sickle_zap_in, (params.zapData));
+        targets[i + 1] = address(zapLib);
+        data[i + 1] = abi.encodeCall(ZapLib.zapIn, (params.zapData));
 
         address depositFarmConnector =
             connectorRegistry.connectorOf(params.depositContractAddress);
@@ -82,9 +118,11 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
             )
         );
 
-        targets[i + 3] = address(this);
-        data[i + 3] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+        if (sweepTokens.length > 0) {
+            targets[i + 3] = address(transferLib);
+            data[i + 3] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
 
         sickle.multicall(targets, data);
     }
@@ -101,7 +139,8 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
         bytes[] memory data = new bytes[](arrayLength);
 
         uint256 i;
-        for (; i < params.claimParams.length; i++) {
+        uint256 length = params.claimParams.length;
+        for (; i < length;) {
             address farmConnector = connectorRegistry.connectorOf(
                 params.claimParams[i].claimContractAddress
             );
@@ -114,20 +153,23 @@ contract MultiFarmStrategy is TransferModule, ZapModule {
                     params.claimParams[i].claimExtraData
                 )
             );
+
+            unchecked {
+                i++;
+            }
         }
 
-        targets[i] = address(this);
-        data[i] =
-            abi.encodeCall(SwapModule._sickle_swap_multiple, (params.swaps));
-        targets[i + 1] = address(this);
+        targets[i] = address(swapLib);
+        data[i] = abi.encodeCall(SwapLib.swapMultiple, (params.swaps));
+        targets[i + 1] = address(feesLib);
         data[i + 1] = abi.encodeCall(
-            this._sickle_charge_fees,
-            (address(this), MultiFarmStrategyFees.Harvest, params.tokensOut)
+            FeesLib.chargeFees,
+            (strategyAddress, MultiFarmStrategyFees.Harvest, params.tokensOut)
         );
 
-        targets[i + 2] = address(this);
+        targets[i + 2] = address(transferLib);
         data[i + 2] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+            abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
 
         sickle.multicall(targets, data);
     }

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./base/Admin.sol";
-import "./base/NonDelegateMulticall.sol";
+import { Admin } from "contracts/base/Admin.sol";
+import { NonDelegateMulticall } from "contracts/base/NonDelegateMulticall.sol";
+import { SickleRegistry } from "contracts/SickleRegistry.sol";
 
 contract Compounder is Admin, NonDelegateMulticall {
     error NotApprovedCompounder();

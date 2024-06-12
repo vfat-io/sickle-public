@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/proxy/Clones.sol";
-
-import "./Sickle.sol";
-import "./base/Admin.sol";
+import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import { SickleRegistry } from "contracts/SickleRegistry.sol";
+import { Sickle } from "contracts/Sickle.sol";
+import { Admin } from "contracts/base/Admin.sol";
 
 /// @title SickleFactory contract
 /// @author vfat.tools

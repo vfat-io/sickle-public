@@ -5,17 +5,25 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IMorpho } from "@morpho-blue/interfaces/IMorpho.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
-import "../base/Admin.sol";
-import "../interfaces/external/flashloans/ILendingPoolV2.sol";
-import "../interfaces/external/flashloans/IPoolV3.sol";
-import "../interfaces/external/flashloans/IBalancerVault.sol";
-import "../interfaces/external/uniswap/IUniswapV3Pool.sol";
-import "../interfaces/external/uniswap/IUniswapV2Factory.sol";
-import "../interfaces/external/uniswap/IUniswapV2Pair.sol";
-import "../interfaces/external/uniswap/IUniswapV3Factory.sol";
-import "../SickleRegistry.sol";
-import "../SickleFactory.sol";
-import "../base/Multicall.sol";
+import { Admin } from "contracts/base/Admin.sol";
+import { ILendingPoolV2 } from
+    "contracts/interfaces/external/flashloans/ILendingPoolV2.sol";
+import { IPoolV3 } from "contracts/interfaces/external/flashloans/IPoolV3.sol";
+import {
+    IBalancerVault,
+    IFlashLoanRecipient
+} from "contracts/interfaces/external/flashloans/IBalancerVault.sol";
+import { IUniswapV3Pool } from
+    "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
+import { IUniswapV2Factory } from
+    "contracts/interfaces/external/uniswap/IUniswapV2Factory.sol";
+import { IUniswapV2Pair } from
+    "contracts/interfaces/external/uniswap/IUniswapV2Pair.sol";
+import { IUniswapV3Factory } from
+    "contracts/interfaces/external/uniswap/IUniswapV3Factory.sol";
+import { SickleRegistry } from "contracts/SickleRegistry.sol";
+import { SickleFactory } from "contracts/SickleFactory.sol";
+import { Multicall } from "contracts/base/Multicall.sol";
 
 library FlashloanStrategyEvents {
     event SelectorLinked(bytes4 selector, address strategy);
@@ -58,6 +66,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
     error SenderIsNotBalancerVault();
     error SenderIsNotUniswapPool();
     error SenderIsNorMorpho();
+    error NotSingleAsset();
 
     /// ERRORS: Registry ///
 
@@ -150,7 +159,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             revert ParamsMismatch();
         }
 
-        for (uint256 i = 0; i < whitelistedOpsSelectors.length;) {
+        uint256 length = whitelistedOpsSelectors.length;
+        for (uint256 i; i < length;) {
             if (
                 whitelistedFlashloanOpsRegistry[whitelistedOpsSelectors[i]]
                     != address(0)
@@ -173,7 +183,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
 
     modifier callbackSafetyCheck(bytes memory params) {
         bytes32 hashCheck = keccak256(params);
-        if (hashCheck != flashloanDataHash || flashloanDataHash == bytes32(0)) {
+        if (hashCheck != flashloanDataHash) {
             revert InvalidFlashloanData();
         }
         if (currentFlashloanStatus != FlashloanStatus.FLASHLOAN_INITIATED) {
@@ -299,6 +309,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
                 address(this), amounts[0], amounts[1], uniswapFlashParams
             );
         } else if (providerType == FlashloanProvider.MORPHO) {
+            if (assets.length != 1) revert NotSingleAsset();
             bytes memory morphoParams =
                 abi.encode(sickleAddress, assets[0], params);
             // storing the hash of the callback data for safety checks
@@ -602,7 +613,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         if (providerType == FlashloanProvider.AAVEV2) {
             uint256 aaveV2FlashloanPremiumInBasisPoints =
                 ILendingPoolV2(aaveV2LendingPool).FLASHLOAN_PREMIUM_TOTAL();
-            for (uint256 i = 0; i < amounts.length;) {
+            uint256 length = amounts.length;
+            for (uint256 i; i < length;) {
                 if (amounts[i] > 0 && aaveV2FlashloanPremiumInBasisPoints > 0) {
                     premiums[i] = (
                         (amounts[i] * aaveV2FlashloanPremiumInBasisPoints - 1)
@@ -619,7 +631,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         } else if (providerType == FlashloanProvider.AAVEV3) {
             uint256 aaveV3FlashloanPremiumInBasisPoints =
                 IPoolV3(aaveV3LendingPool).FLASHLOAN_PREMIUM_TOTAL();
-            for (uint256 i = 0; i < amounts.length;) {
+            uint256 length = amounts.length;
+            for (uint256 i; i < length;) {
                 if (amounts[i] > 0 && aaveV3FlashloanPremiumInBasisPoints > 0) {
                     premiums[i] = (
                         (amounts[i] * aaveV3FlashloanPremiumInBasisPoints - 1)
@@ -637,7 +650,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             uint256 balancerFlashLoanFeePercentage = IBalancerVault(
                 balancerVault
             ).getProtocolFeesCollector().getFlashLoanFeePercentage();
-            for (uint256 i = 0; i < amounts.length;) {
+            uint256 length = amounts.length;
+            for (uint256 i; i < length;) {
                 // reproducing the mulUp() function from Balancer's FixedPoint
                 // helper library
                 if (balancerFlashLoanFeePercentage == 0 || amounts[i] == 0) {
@@ -653,7 +667,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
                 }
             }
         } else if (providerType == FlashloanProvider.UNIV2) {
-            for (uint256 i = 0; i < amounts.length;) {
+            uint256 length = amounts.length;
+            for (uint256 i; i < length;) {
                 if (amounts[i] > 0) {
                     premiums[i] = ((amounts[i] * 3) / 997) + 1;
                 } else {
@@ -665,7 +680,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
                 }
             }
         } else if (providerType == FlashloanProvider.UNIV3) {
-            for (uint256 i = 0; i < amounts.length;) {
+            uint256 length = amounts.length;
+            for (uint256 i; i < length;) {
                 if (amounts[i] > 0) {
                     premiums[i] =
                         ((amounts[i] * providerFee) / 10_000 / 100) + 1; // hundredths
@@ -731,7 +747,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         uint256[] memory amounts,
         uint256[] memory premiums
     ) internal {
-        for (uint256 i = 0; i < assets.length;) {
+        uint256 length = assets.length;
+        for (uint256 i; i < length;) {
             uint256 total = amounts[i] + premiums[i];
             if (total > 0) {
                 SafeTransferLib.safeTransfer(assets[i], to, total);
@@ -749,7 +766,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         uint256[] memory amounts,
         uint256[] memory premiums
     ) internal {
-        for (uint256 i = 0; i < assets.length;) {
+        uint256 length = assets.length;
+        for (uint256 i; i < length;) {
             uint256 total = amounts[i] + premiums[i];
             if (total > 0) {
                 SafeTransferLib.safeTransfer(address(assets[i]), to, total);
@@ -767,7 +785,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         uint256[] memory amounts,
         uint256[] memory premiums
     ) internal {
-        for (uint256 i = 0; i < assets.length;) {
+        uint256 length = assets.length;
+        for (uint256 i; i < length;) {
             uint256 total = amounts[i] + premiums[i];
             if (total > 0) {
                 SafeTransferLib.safeApprove(assets[i], to, total);

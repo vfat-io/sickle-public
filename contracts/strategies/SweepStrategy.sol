@@ -1,16 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./modules/NftTransferModule.sol";
+import { NftTransferLib } from "contracts/libraries/NftTransferLib.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import {
+    Sickle,
+    SickleFactory,
+    StrategyModule,
+    ConnectorRegistry
+} from "contracts/modules/StrategyModule.sol";
 
-contract SweepStrategy is NftTransferModule {
+contract SweepStrategy is StrategyModule {
     error InvalidInputLength(); //0x7db491eb
 
+    NftTransferLib public immutable nftTransferLib;
+    TransferLib public immutable transferLib;
+
     constructor(
-        SickleFactory factory_,
-        FeesLib feesLib_,
-        address wrappedNativeAddress_
-    ) NftTransferModule(factory_, feesLib_, wrappedNativeAddress_) { }
+        SickleFactory factory,
+        NftTransferLib nftTransferLib_,
+        TransferLib transferLib_
+    ) StrategyModule(factory, ConnectorRegistry(address(0))) {
+        nftTransferLib = nftTransferLib_;
+        transferLib = transferLib_;
+    }
 
     function sweepTokens(address[] memory tokens) public {
         Sickle sickle = getSickle(msg.sender);
@@ -18,8 +31,8 @@ contract SweepStrategy is NftTransferModule {
         address[] memory targets = new address[](1);
         bytes[] memory data = new bytes[](1);
 
-        targets[0] = address(this);
-        data[0] = abi.encodeCall(this._sickle_transfer_tokens_to_user, (tokens));
+        targets[0] = address(transferLib);
+        data[0] = abi.encodeCall(TransferLib.transferTokensToUser, (tokens));
 
         sickle.multicall(targets, data);
     }
@@ -37,11 +50,16 @@ contract SweepStrategy is NftTransferModule {
         address[] memory targets = new address[](tokens.length);
         bytes[] memory data = new bytes[](tokens.length);
 
-        for (uint256 i = 0; i < tokens.length; i++) {
-            targets[i] = address(this);
+        uint256 length = tokens.length;
+        for (uint256 i; i < length;) {
+            targets[i] = address(nftTransferLib);
             data[i] = abi.encodeCall(
-                this._sickle_transfer_nft_to_user, (tokens[i], tokenIds[i])
+                NftTransferLib.transferErc721ToUser, (tokens[i], tokenIds[i])
             );
+
+            unchecked {
+                i++;
+            }
         }
 
         sickle.multicall(targets, data);
@@ -62,12 +80,17 @@ contract SweepStrategy is NftTransferModule {
         address[] memory targets = new address[](tokens.length);
         bytes[] memory data = new bytes[](tokens.length);
 
-        for (uint256 i = 0; i < tokens.length; i++) {
-            targets[i] = address(this);
+        uint256 length = tokens.length;
+        for (uint256 i; i < length;) {
+            targets[i] = address(nftTransferLib);
             data[i] = abi.encodeCall(
-                this._sickle_transfer_erc1155_to_user,
+                NftTransferLib.transferErc1155ToUser,
                 (tokens[i], tokenIds[i], amounts[i])
             );
+
+            unchecked {
+                i++;
+            }
         }
 
         sickle.multicall(targets, data);

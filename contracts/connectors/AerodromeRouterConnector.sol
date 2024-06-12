@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/aerodrome/IRouter.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { IRouter } from "contracts/interfaces/external/aerodrome/IRouter.sol";
 
 struct AerodromeLiquidityExtraData {
     bool isStablePool;

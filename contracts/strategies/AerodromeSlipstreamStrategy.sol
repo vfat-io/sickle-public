@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../Sickle.sol";
-import "./modules/TransferModule.sol";
-import "./modules/ZapModule.sol";
-import "../interfaces/IFarmConnector.sol";
+import { FeesLib } from "contracts/libraries/FeesLib.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import { ZapLib, ZapInData, ZapOutData } from "contracts/libraries/ZapLib.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import {
+    StrategyModule,
+    Sickle,
+    SickleFactory,
+    ConnectorRegistry
+} from "contracts/modules/StrategyModule.sol";
+import { SwapData } from "contracts/interfaces/ILiquidityConnector.sol";
 
 library AerodromeSlipstreamStrategyFees {
     bytes4 constant Deposit = bytes4(keccak256("AerodromeSlipstreamDepositFee"));
@@ -19,29 +26,22 @@ library AerodromeSlipstreamStrategyFees {
         bytes4(keccak256("AerodromeSlipstreamRebalanceFee"));
 }
 
-contract AerodromeSlipstreamStrategy is ZapModule {
+contract AerodromeSlipstreamStrategy is StrategyModule {
     error TokenOutRequired();
     error GasCostExceedsEstimate();
-
-    constructor(
-        SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
-        ConnectorRegistry connectorRegistry
-    ) ZapModule(factory, feesLib, wrappedNativeAddress, connectorRegistry) { }
 
     struct DepositParams {
         address stakingContractAddress;
         address[] tokensIn;
         uint256[] amountsIn;
-        ZapModule.ZapInData zapData;
+        ZapInData zapData;
         bytes extraData;
     }
 
     struct WithdrawParams {
         address stakingContractAddress;
         bytes extraData;
-        ZapModule.ZapOutData zapData;
+        ZapOutData zapData;
         address[] tokensOut;
     }
 
@@ -56,9 +56,32 @@ contract AerodromeSlipstreamStrategy is ZapModule {
         address claimContractAddress;
         bytes claimExtraData;
         address[] rewardTokens;
-        ZapModule.ZapInData zapData;
+        ZapInData zapData;
         address depositContractAddress;
         bytes depositExtraData;
+    }
+
+    struct Libraries {
+        ZapLib zapLib;
+        TransferLib transferLib;
+        FeesLib feesLib;
+    }
+
+    ZapLib public immutable zapLib;
+    TransferLib public immutable transferLib;
+    FeesLib public immutable feesLib;
+
+    address public immutable strategyAddress;
+
+    constructor(
+        SickleFactory factory,
+        ConnectorRegistry connectorRegistry,
+        Libraries memory libraries
+    ) StrategyModule(factory, connectorRegistry) {
+        zapLib = libraries.zapLib;
+        transferLib = libraries.transferLib;
+        feesLib = libraries.feesLib;
+        strategyAddress = address(this);
     }
 
     function compound(
@@ -76,11 +99,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (params.claimContractAddress, params.claimExtraData)
         );
 
-        targets[1] = address(this);
+        targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 AerodromeSlipstreamStrategyFees.Compound,
                 params.rewardTokens
             )
@@ -92,8 +115,8 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (params.claimContractAddress, 0, params.claimExtraData)
         );
 
-        targets[3] = address(this);
-        data[3] = abi.encodeCall(ZapModule._sickle_zap_in, (params.zapData));
+        targets[3] = address(zapLib);
+        data[3] = abi.encodeCall(ZapLib.zapIn, (params.zapData));
 
         targets[4] =
             connectorRegistry.connectorOf(params.depositContractAddress);
@@ -106,10 +129,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             )
         );
 
-        targets[5] = address(this);
-        data[5] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
-
+        if (sweepTokens.length > 0) {
+            targets[5] = address(transferLib);
+            data[5] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
         sickle.multicall(targets, data);
     }
 
@@ -129,11 +153,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (params.claimContractAddress, params.claimExtraData)
         );
 
-        targets[1] = address(this);
+        targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 AerodromeSlipstreamStrategyFees.CompoundFor,
                 params.rewardTokens
             )
@@ -145,8 +169,8 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (params.claimContractAddress, 0, params.claimExtraData)
         );
 
-        targets[3] = address(this);
-        data[3] = abi.encodeCall(ZapModule._sickle_zap_in, (params.zapData));
+        targets[3] = address(zapLib);
+        data[3] = abi.encodeCall(ZapLib.zapIn, (params.zapData));
 
         targets[4] =
             connectorRegistry.connectorOf(params.depositContractAddress);
@@ -159,9 +183,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             )
         );
 
-        targets[5] = address(this);
-        data[5] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+        if (sweepTokens.length > 0) {
+            targets[5] = address(transferLib);
+            data[5] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
 
         sickle.multicall(targets, data);
     }
@@ -172,7 +198,7 @@ contract AerodromeSlipstreamStrategy is ZapModule {
         address[] memory sweepTokens
     ) external payable {
         if (depositParams.tokensIn.length == 0) {
-            revert TokenInRequired();
+            revert TransferLib.TokenInRequired();
         }
 
         Sickle sickle = getSickle(msg.sender);
@@ -180,13 +206,13 @@ contract AerodromeSlipstreamStrategy is ZapModule {
         address[] memory targets = new address[](1);
         bytes[] memory data = new bytes[](1);
 
-        targets[0] = address(this);
+        targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
-            this._sickle_transfer_tokens_from_user,
+            TransferLib.transferTokensFromUser,
             (
                 depositParams.tokensIn,
                 depositParams.amountsIn,
-                address(this),
+                strategyAddress,
                 AerodromeSlipstreamStrategyFees.Deposit
             )
         );
@@ -203,11 +229,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (harvestParams.stakingContractAddress, harvestParams.extraData)
         );
 
-        targets[1] = address(this);
+        targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 AerodromeSlipstreamStrategyFees.Harvest,
                 harvestParams.tokensOut
             )
@@ -220,9 +246,8 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (harvestParams.stakingContractAddress, 0, harvestParams.extraData)
         );
 
-        targets[3] = address(this);
-        data[3] =
-            abi.encodeCall(ZapModule._sickle_zap_in, (depositParams.zapData));
+        targets[3] = address(zapLib);
+        data[3] = abi.encodeCall(ZapLib.zapIn, (depositParams.zapData));
 
         targets[4] =
             connectorRegistry.connectorOf(depositParams.stakingContractAddress);
@@ -235,9 +260,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             )
         );
 
-        targets[5] = address(this);
-        data[5] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+        if (sweepTokens.length > 0) {
+            targets[5] = address(transferLib);
+            data[5] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
 
         sickle.multicall(targets, data);
     }
@@ -264,11 +291,11 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             (harvestParams.stakingContractAddress, harvestParams.extraData)
         );
 
-        targets[1] = address(this);
+        targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 AerodromeSlipstreamStrategyFees.Harvest,
                 harvestParams.tokensOut
             )
@@ -285,9 +312,8 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             )
         );
 
-        targets[3] = address(this);
-        data[3] =
-            abi.encodeCall(ZapModule._sickle_zap_out, (withdrawParams.zapData));
+        targets[3] = address(zapLib);
+        data[3] = abi.encodeCall(ZapLib.zapOut, (withdrawParams.zapData));
 
         targets[4] =
             connectorRegistry.connectorOf(depositParams.stakingContractAddress);
@@ -300,19 +326,21 @@ contract AerodromeSlipstreamStrategy is ZapModule {
             )
         );
 
-        targets[5] = address(this);
+        targets[5] = address(feesLib);
         data[5] = abi.encodeCall(
-            this._sickle_charge_fees,
+            FeesLib.chargeFees,
             (
-                address(this),
+                strategyAddress,
                 AerodromeSlipstreamStrategyFees.Withdraw,
                 withdrawParams.tokensOut
             )
         );
 
-        targets[6] = address(this);
-        data[6] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+        if (sweepTokens.length > 0) {
+            targets[6] = address(transferLib);
+            data[6] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
 
         sickle.multicall(targets, data);
     }

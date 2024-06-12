@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../ConnectorRegistry.sol";
-import "./AerodromeGaugeConnector.sol"; // ABI is the same as Aerodrome
+import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { AerodromeGaugeConnector } from
+    "contracts/connectors/AerodromeGaugeConnector.sol"; // ABI
+    // is the same as Aerodrome
 
 interface IStakingRewardsFactory {
     function poolForGauge(address gauge) external view returns (address);

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../ConnectorRegistry.sol";
-
-import "../interfaces/external/compound-v2/ComptrollerStorage.sol";
-import "./CompoundMarketConnector.sol";
+import { ComptrollerV1Storage } from
+    "contracts/interfaces/external/compound-v2/ComptrollerStorage.sol";
+import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { CompoundMarketConnector } from
+    "contracts/connectors/CompoundMarketConnector.sol";
 
 contract ComptrollerRegistry is ICustomConnectorRegistry {
     ComptrollerV1Storage public immutable comptroller;

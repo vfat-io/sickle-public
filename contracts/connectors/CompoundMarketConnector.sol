@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILendingConnector.sol";
-import "../interfaces/external/compound-v2/CTokenInterfaces.sol";
+import { ILendingConnector } from "contracts/interfaces/ILendingConnector.sol";
+import {
+    CTokenInterface,
+    CErc20Interface,
+    ComptrollerInterface
+} from "contracts/interfaces/external/compound-v2/CTokenInterfaces.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract CompoundMarketConnector is ILendingConnector {
     error CompoundActionFailed(string action, uint256 errorCode);

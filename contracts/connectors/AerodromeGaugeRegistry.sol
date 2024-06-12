@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../ConnectorRegistry.sol";
-import "./AerodromeGaugeConnector.sol";
-import "./AerodromeSlipstreamGaugeConnector.sol";
-import { IGaugeRegistryVoter } from "./GaugeRegistry.sol";
-import { IPoolFactory } from "../interfaces/external/aerodrome/IPoolFactory.sol";
+import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { AerodromeGaugeConnector } from
+    "contracts/connectors/AerodromeGaugeConnector.sol";
+import { AerodromeSlipstreamGaugeConnector } from
+    "contracts/connectors/AerodromeSlipstreamGaugeConnector.sol";
+import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
+import { IPoolFactory } from
+    "contracts/interfaces/external/aerodrome/IPoolFactory.sol";
 
 contract AerodromeGaugeRegistry is ICustomConnectorRegistry {
     IGaugeRegistryVoter public immutable voter;

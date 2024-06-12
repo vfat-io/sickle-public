@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import { EnumerableSet } from
+    "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract SickleMultisig {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -37,6 +38,7 @@ contract SickleMultisig {
     error InvalidThreshold();
 
     error TransactionDoesNotExist();
+    error TransactionNotReadyToExecute();
     error TransactionNoLongerValid();
     error TransactionAlreadyExists();
     error TransactionAlreadySigned();
@@ -299,11 +301,17 @@ contract SickleMultisig {
         // Validate transaction state
         _validateTransaction(transaction);
 
+        // Check if the transaction has enough signatures
+        if (transaction.signatures < threshold) {
+            revert TransactionNotReadyToExecute();
+        }
+
         // Update transaction state
         transaction.executed = true;
 
         // Execute calls
-        for (uint256 i; i < transaction.proposal.targets.length;) {
+        uint256 length = transaction.proposal.targets.length;
+        for (uint256 i; i < length;) {
             _call(
                 transaction.proposal.targets[i],
                 transaction.proposal.calldatas[i]
@@ -322,7 +330,6 @@ contract SickleMultisig {
         (bool success, bytes memory result) = target.call(data);
 
         if (!success) {
-            if (result.length == 0) revert();
             assembly {
                 revert(add(32, result), mload(result))
             }

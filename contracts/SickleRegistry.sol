@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./base/Admin.sol";
+import { Admin } from "contracts/base/Admin.sol";
 
 library SickleRegistryEvents {
     event CollectorChanged(address newCollector);

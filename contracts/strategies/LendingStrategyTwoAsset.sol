@@ -1,11 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./lending/FlashloanInitiator.sol";
-import "../interfaces/ILendingConnector.sol";
-import "./modules/ZapModule.sol";
+import {
+    FlashloanInitiator,
+    FlashloanStrategy
+} from "contracts/strategies/lending/FlashloanInitiator.sol";
+import { ILendingConnector } from "contracts/interfaces/ILendingConnector.sol";
+import {
+    StrategyModule,
+    SickleFactory,
+    Sickle,
+    ConnectorRegistry
+} from "contracts/modules/StrategyModule.sol";
+import { SwapData } from "contracts/interfaces/ILiquidityConnector.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import { SwapLib } from "contracts/libraries/SwapLib.sol";
+import { LendingStrategyFees } from
+    "contracts/strategies/lending/LendingStructs.sol";
 
-contract LendingStrategyTwoAsset is FlashloanInitiator, ZapModule {
+contract LendingStrategyTwoAsset is FlashloanInitiator, StrategyModule {
     error SwapPathNotSupported(); // 0x6b46d10f
     error InputArgumentsMismatch(); // 0xe3814450
 
@@ -25,16 +38,25 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, ZapModule {
         bytes extraData;
     }
 
+    TransferLib public immutable transferLib;
+    SwapLib public immutable swapLib;
+
+    address public immutable strategyAddress;
+
     constructor(
         SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
         ConnectorRegistry connectorRegistry,
-        FlashloanStrategy flashloanStrategy
+        FlashloanStrategy flashloanStrategy,
+        TransferLib transferLib_,
+        SwapLib swapLib_
     )
         FlashloanInitiator(flashloanStrategy)
-        ZapModule(factory, feesLib, wrappedNativeAddress, connectorRegistry)
-    { }
+        StrategyModule(factory, connectorRegistry)
+    {
+        transferLib = transferLib_;
+        swapLib = swapLib_;
+        strategyAddress = address(this);
+    }
 
     /// FLASHLOAN FUNCTIONS ///
 
@@ -48,20 +70,18 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, ZapModule {
         address approved,
         bytes32 referralCode
     ) public payable {
-        Sickle sickle = Sickle(
-            payable(factory.getOrDeploy(msg.sender, approved, referralCode))
-        );
+        Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
         address[] memory targets = new address[](2);
-        targets[0] = address(this);
+        targets[0] = address(transferLib);
         targets[1] = connectorRegistry.connectorOf(collateralTokenParams.market);
 
         bytes[] memory data = new bytes[](2);
         data[0] = abi.encodeCall(
-            this._sickle_transfer_token_from_user,
+            TransferLib.transferTokenFromUser,
             (
                 collateralTokenParams.token,
                 collateralTokenParams.amountIn,
-                address(this),
+                strategyAddress,
                 LendingStrategyFees.Deposit
             )
         );
@@ -102,8 +122,8 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, ZapModule {
             )
         );
 
-        targets[1] = address(this);
-        data[1] = abi.encodeCall(SwapModule._sickle_swap, (interestSwapData));
+        targets[1] = address(swapLib);
+        data[1] = abi.encodeCall(SwapLib.swap, (interestSwapData));
 
         sickle.multicall(targets, data);
 
@@ -119,9 +139,9 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, ZapModule {
             )
         );
 
-        targets[1] = address(this);
+        targets[1] = address(transferLib);
         data[1] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (sweepTokens));
+            abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
 
         sickle.multicall(targets, data);
     }

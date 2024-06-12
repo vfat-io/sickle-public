@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "openzeppelin-contracts/contracts/interfaces/IERC721Enumerable.sol";
+import { IERC721Enumerable } from
+    "openzeppelin-contracts/contracts/interfaces/IERC721Enumerable.sol";
 
 interface INonfungiblePositionManager is IERC721Enumerable {
     struct IncreaseLiquidityParams {

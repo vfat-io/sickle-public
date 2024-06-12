@@ -1,31 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { Sickle } from "../Sickle.sol";
-import { ConnectorRegistry } from "../ConnectorRegistry.sol";
+import { Sickle } from "contracts/Sickle.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { TransferLib, FeesLib } from "contracts/libraries/TransferLib.sol";
 import {
-    TransferModule,
-    SickleFactory,
-    FeesLib
-} from "./modules/TransferModule.sol";
-import { IFarmConnector } from "../interfaces/IFarmConnector.sol";
+    StrategyModule, SickleFactory
+} from "contracts/modules/StrategyModule.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
 
 library SimpleFarmStrategyFees {
     bytes4 constant Harvest = bytes4(keccak256("SimpleFarmHarvestFee"));
 }
 
-contract SimpleFarmStrategy is TransferModule {
-    ConnectorRegistry immutable connectorRegistry;
-
-    constructor(
-        SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
-        ConnectorRegistry connectorRegistry_
-    ) TransferModule(factory, feesLib, wrappedNativeAddress) {
-        connectorRegistry = connectorRegistry_;
-    }
-
+contract SimpleFarmStrategy is StrategyModule {
     struct DepositParams {
         address lpToken;
         uint256 amountIn;
@@ -46,21 +34,35 @@ contract SimpleFarmStrategy is TransferModule {
         bytes extraData;
     }
 
+    TransferLib public immutable transferLib;
+    FeesLib public immutable feesLib;
+
+    address public immutable strategyAddress;
+
+    constructor(
+        SickleFactory factory,
+        ConnectorRegistry connectorRegistry,
+        TransferLib transferLib_,
+        FeesLib feesLib_
+    ) StrategyModule(factory, connectorRegistry) {
+        transferLib = transferLib_;
+        feesLib = feesLib_;
+        strategyAddress = address(this);
+    }
+
     function deposit(
         DepositParams calldata params,
         address approved,
         bytes32 referralCode
     ) public payable {
-        Sickle sickle = Sickle(
-            payable(factory.getOrDeploy(msg.sender, approved, referralCode))
-        );
+        Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
         address[] memory targets = new address[](2);
         bytes[] memory data = new bytes[](2);
 
-        targets[0] = address(this);
+        targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
-            this._sickle_transfer_token_from_user,
-            (params.lpToken, params.amountIn, address(this), bytes4(0))
+            TransferLib.transferTokenFromUser,
+            (params.lpToken, params.amountIn, strategyAddress, bytes4(0))
         );
 
         targets[1] =
@@ -87,10 +89,9 @@ contract SimpleFarmStrategy is TransferModule {
             (params.stakingContractAddress, params.amountOut, params.extraData)
         );
 
-        targets[1] = address(this);
-        data[1] = abi.encodeCall(
-            this._sickle_transfer_token_to_user, (params.lpToken)
-        );
+        targets[1] = address(transferLib);
+        data[1] =
+            abi.encodeCall(TransferLib.transferTokenToUser, (params.lpToken));
 
         sickle.multicall(targets, data);
     }
@@ -109,16 +110,15 @@ contract SimpleFarmStrategy is TransferModule {
             (params.stakingContractAddress, params.extraData)
         );
 
-        targets[1] = address(this);
+        targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            this._sickle_charge_fees,
-            (address(this), SimpleFarmStrategyFees.Harvest, params.tokensOut)
+            FeesLib.chargeFees,
+            (strategyAddress, SimpleFarmStrategyFees.Harvest, params.tokensOut)
         );
 
-        targets[2] = address(this);
-        data[2] = abi.encodeCall(
-            this._sickle_transfer_tokens_to_user, (params.tokensOut)
-        );
+        targets[2] = address(transferLib);
+        data[2] =
+            abi.encodeCall(TransferLib.transferTokensToUser, (params.tokensOut));
 
         sickle.multicall(targets, data);
     }

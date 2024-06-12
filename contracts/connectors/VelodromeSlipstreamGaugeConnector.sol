@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/IFarmConnector.sol";
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/aerodrome/ICLGauge.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { ICLGauge } from "contracts/interfaces/external/aerodrome/ICLGauge.sol";
 import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { IERC721Enumerable } from
     "@openzeppelin/contracts/interfaces/IERC721Enumerable.sol";

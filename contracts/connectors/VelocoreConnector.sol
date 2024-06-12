@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/uniswap/IUniswapV2Router02.sol";
-import "../interfaces/external/IWETH.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { IUniswapV2Router02 } from
+    "contracts/interfaces/external/uniswap/IUniswapV2Router02.sol";
+import { IWETH9 } from "contracts/interfaces/external/IWETH.sol";
 
 struct VelocoreExtraData {
     address[] path;
@@ -24,9 +30,13 @@ contract VelocoreConnector is ILiquidityConnector {
         VelocoreExtraData memory extraData =
             abi.decode(swapData.extraData, (VelocoreExtraData));
 
-        for (uint256 i = 0; i < extraData.path.length; i++) {
+        uint256 length = extraData.path.length;
+        for (uint256 i; i < length;) {
             if (extraData.path[i] == wethContractAddress) {
                 extraData.path[i] = address(0); // Velocore implem detail
+            }
+            unchecked {
+                i++;
             }
         }
 

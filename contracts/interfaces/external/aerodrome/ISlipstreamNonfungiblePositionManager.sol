@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/interfaces/IERC721Metadata.sol";
-import "@openzeppelin/contracts/interfaces/IERC721Enumerable.sol";
+import { IERC721Metadata } from
+    "@openzeppelin/contracts/interfaces/IERC721Metadata.sol";
+import { IERC721Enumerable } from
+    "@openzeppelin/contracts/interfaces/IERC721Enumerable.sol";
 
 /// @title Non-fungible token for positions
 /// @notice Wraps CL positions in a non-fungible token interface which allows

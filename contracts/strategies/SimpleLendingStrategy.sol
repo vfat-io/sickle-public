@@ -1,19 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./lending/FlashloanInitiator.sol";
-import "./modules/TransferModule.sol";
+import { FlashloanInitiator } from
+    "contracts/strategies/lending/FlashloanInitiator.sol";
+import { FlashloanStrategy } from "contracts/strategies/FlashloanStrategy.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import { Sickle } from "contracts/Sickle.sol";
+import { SickleFactory } from "contracts/SickleFactory.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { StrategyModule } from "contracts/modules/StrategyModule.sol";
 
-contract SimpleLendingStrategy is FlashloanInitiator, TransferModule {
+contract SimpleLendingStrategy is FlashloanInitiator, StrategyModule {
+    TransferLib public immutable transferLib;
+
+    address public immutable strategyAddress;
+
     constructor(
         SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
-        FlashloanStrategy flashloanStrategy
+        ConnectorRegistry connectorRegistry,
+        FlashloanStrategy flashloanStrategy,
+        TransferLib transferLib_
     )
+        StrategyModule(factory, connectorRegistry)
         FlashloanInitiator(flashloanStrategy)
-        TransferModule(factory, feesLib, wrappedNativeAddress)
-    { }
+    {
+        transferLib = transferLib_;
+        strategyAddress = address(this);
+    }
 
     /// FLASHLOAN FUNCTIONS ///
 
@@ -26,20 +39,18 @@ contract SimpleLendingStrategy is FlashloanInitiator, TransferModule {
         address approved,
         bytes32 referralCode
     ) public payable flashloanParamCheck(flashloanParams) {
-        Sickle sickle = Sickle(
-            payable(factory.getOrDeploy(msg.sender, approved, referralCode))
-        );
+        Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
 
         address[] memory targets = new address[](1);
         bytes[] memory data = new bytes[](1);
 
-        targets[0] = address(this);
+        targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
-            this._sickle_transfer_token_from_user,
+            TransferLib.transferTokenFromUser,
             (
                 increaseParams.token,
                 increaseParams.amountIn,
-                address(this),
+                strategyAddress,
                 bytes4(0)
             )
         );
@@ -72,9 +83,9 @@ contract SimpleLendingStrategy is FlashloanInitiator, TransferModule {
         address[] memory targets = new address[](1);
         bytes[] memory data = new bytes[](1);
 
-        targets[0] = address(this);
+        targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
-            this._sickle_transfer_token_to_user, decreaseParams.token
+            TransferLib.transferTokenToUser, decreaseParams.token
         );
 
         sickle.multicall(targets, data);

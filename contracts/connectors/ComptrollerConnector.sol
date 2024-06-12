@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/IFarmConnector.sol";
-import "../interfaces/external/compound-v2/CTokenInterfaces.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import {
+    CTokenInterface,
+    ComptrollerInterface
+} from "contracts/interfaces/external/compound-v2/CTokenInterfaces.sol";
 
 struct ComptrollerExtraData {
     address[] cTokens;

@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ILiquidityConnector.sol";
-import "../interfaces/external/ramses/IRamsesRouter.sol";
+import {
+    ILiquidityConnector,
+    AddLiquidityData,
+    RemoveLiquidityData,
+    SwapData
+} from "contracts/interfaces/ILiquidityConnector.sol";
+import { IRamsesRouter } from
+    "contracts/interfaces/external/ramses/IRamsesRouter.sol";
 
 struct RamsesLiquidityExtraData {
     bool isStablePool;

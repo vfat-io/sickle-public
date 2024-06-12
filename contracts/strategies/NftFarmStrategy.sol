@@ -1,24 +1,43 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./modules/NftTransferModule.sol";
-import "../interfaces/IFarmConnector.sol";
-import "../ConnectorRegistry.sol";
+import { NftTransferLib } from "contracts/libraries/NftTransferLib.sol";
+import { FeesLib } from "contracts/libraries/FeesLib.sol";
+import { TransferLib } from "contracts/libraries/TransferLib.sol";
+import {
+    StrategyModule,
+    SickleFactory,
+    Sickle
+} from "contracts/modules/StrategyModule.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
 
 library NftFarmStrategyFees {
     bytes4 constant Harvest = bytes4(keccak256("FarmHarvestFee"));
 }
 
-contract NftFarmStrategy is NftTransferModule {
-    ConnectorRegistry public immutable connectorRegistry;
+contract NftFarmStrategy is StrategyModule {
+    struct Libraries {
+        NftTransferLib nftTransferLib;
+        FeesLib feesLib;
+        TransferLib transferLib;
+    }
+
+    NftTransferLib public immutable nftTransferLib;
+    FeesLib public immutable feesLib;
+    TransferLib public immutable transferLib;
+
+    address public immutable strategyAddress;
 
     constructor(
         SickleFactory factory,
-        FeesLib feesLib,
-        address wrappedNativeAddress,
-        ConnectorRegistry connectorRegistry_
-    ) NftTransferModule(factory, feesLib, wrappedNativeAddress) {
-        connectorRegistry = connectorRegistry_;
+        ConnectorRegistry connectorRegistry,
+        Libraries memory libraries
+    ) StrategyModule(factory, connectorRegistry) {
+        nftTransferLib = libraries.nftTransferLib;
+        feesLib = libraries.feesLib;
+        transferLib = libraries.transferLib;
+        strategyAddress = address(this);
     }
 
     function depositErc721(
@@ -29,9 +48,7 @@ contract NftFarmStrategy is NftTransferModule {
         address approved,
         bytes32 referralCode
     ) public {
-        Sickle sickle = Sickle(
-            payable(factory.getOrDeploy(msg.sender, approved, referralCode))
-        );
+        Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
 
         address farmConnector =
             connectorRegistry.connectorOf(stakingContractAddress);
@@ -39,9 +56,9 @@ contract NftFarmStrategy is NftTransferModule {
         address[] memory targets = new address[](2);
         bytes[] memory data = new bytes[](2);
 
-        targets[0] = address(this);
+        targets[0] = address(nftTransferLib);
         data[0] = abi.encodeCall(
-            this._sickle_transfer_nft_from_user, (nftContractAddress, tokenId)
+            NftTransferLib.transferErc721FromUser, (nftContractAddress, tokenId)
         );
 
         targets[1] = farmConnector;
@@ -79,20 +96,20 @@ contract NftFarmStrategy is NftTransferModule {
             (stakingContractAddress, tokenId, extraData)
         );
 
-        targets[2] = address(this);
+        targets[2] = address(nftTransferLib);
         data[2] = abi.encodeCall(
-            this._sickle_transfer_nft_to_user, (nftContractAddress, tokenId)
+            NftTransferLib.transferErc721ToUser, (nftContractAddress, tokenId)
         );
 
-        targets[3] = address(this);
+        targets[3] = address(feesLib);
         data[3] = abi.encodeCall(
-            this._sickle_charge_fees,
-            (address(this), NftFarmStrategyFees.Harvest, rewardTokens)
+            FeesLib.chargeFees,
+            (strategyAddress, NftFarmStrategyFees.Harvest, rewardTokens)
         );
 
-        targets[4] = address(this);
+        targets[4] = address(transferLib);
         data[4] =
-            abi.encodeCall(this._sickle_transfer_tokens_to_user, (rewardTokens));
+            abi.encodeCall(TransferLib.transferTokensToUser, (rewardTokens));
 
         sickle.multicall(targets, data);
     }

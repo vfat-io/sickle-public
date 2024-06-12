@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../ConnectorRegistry.sol";
-import "./RamsesGaugeConnector.sol";
-import "./RamsesV3Connector.sol";
-import { IGaugeRegistryVoter } from "./GaugeRegistry.sol";
-import { IGaugeV2 } from "../interfaces/external/ramses/IGaugeV2.sol";
+import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { RamsesGaugeConnector } from
+    "contracts/connectors/RamsesGaugeConnector.sol";
+import { RamsesV3Connector } from "contracts/connectors/RamsesV3Connector.sol";
+import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
+import { IGaugeV2 } from "contracts/interfaces/external/ramses/IGaugeV2.sol";
 
 interface IRamsesPairFactory {
     function isPair(address pair) external view returns (bool);

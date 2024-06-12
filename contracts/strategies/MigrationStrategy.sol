@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../Sickle.sol";
-import "../SickleFactory.sol";
-import "../ConnectorRegistry.sol";
-import "../interfaces/IFarmConnector.sol";
-import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { Sickle } from "contracts/Sickle.sol";
+import { SickleFactory } from "contracts/SickleFactory.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
 interface IOldSickle {
@@ -139,7 +139,8 @@ contract MigrationStrategy {
         address approved,
         bytes32 referralCode
     ) public {
-        for (uint256 i = 0; i < migrationInfos.length;) {
+        uint256 length = migrationInfos.length;
+        for (uint256 i; i < length;) {
             migrate(oldSickleAddress, migrationInfos[i], approved, referralCode);
 
             unchecked {

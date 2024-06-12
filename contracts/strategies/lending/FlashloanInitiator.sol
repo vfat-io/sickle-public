@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { IERC20 } from "@openzeppelin/contracts/interfaces/IERC20.sol";
-import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-
-import "./LendingStructs.sol";
-import "../../interfaces/IFlashloanCallback.sol";
-import "../FlashloanStrategy.sol";
+import { LendingStructs } from "contracts/strategies/lending/LendingStructs.sol";
+import { IFlashloanCallback } from "contracts/interfaces/IFlashloanCallback.sol";
+import { FlashloanStrategy } from "contracts/strategies/FlashloanStrategy.sol";
 
 abstract contract FlashloanInitiator is LendingStructs {
+    error ArrayLengthMismatch();
+
     modifier flashloanParamCheck(FlashloanParams calldata flashloanParams) {
         if (
             flashloanParams.flashloanAssets.length
                 != flashloanParams.flashloanAmounts.length
         ) {
-            revert SickleRegistry.ArrayLengthMismatch();
+            revert ArrayLengthMismatch();
         }
         _;
     }
@@ -37,7 +36,7 @@ abstract contract FlashloanInitiator is LendingStructs {
         );
 
         bytes memory callback = abi.encodeCall(
-            IFlashloanCallback.flashloan_deposit_callback,
+            IFlashloanCallback.flashloanDepositCallback,
             (
                 flashloanParams.flashloanAssets,
                 flashloanParams.flashloanAmounts,
@@ -65,7 +64,7 @@ abstract contract FlashloanInitiator is LendingStructs {
         );
 
         bytes memory encoded = abi.encodeCall(
-            IFlashloanCallback.flashloan_withdraw_callback,
+            IFlashloanCallback.flashloanWithdrawCallback,
             (
                 flashLoanParams.flashloanAssets,
                 flashLoanParams.flashloanAmounts,
