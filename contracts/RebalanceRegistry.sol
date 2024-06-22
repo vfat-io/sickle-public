@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { INonfungiblePositionManager } from
-    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 import { Sickle } from "contracts/Sickle.sol";
 import {
     IRebalanceRegistry,

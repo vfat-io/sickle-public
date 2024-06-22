@@ -12,6 +12,8 @@ import { INonfungiblePositionManager } from
 import { Sickle } from "contracts/Sickle.sol";
 
 contract RebalanceLib {
+    error TokenIdUnchanged();
+
     function resetRebalanceConfig(
         IRebalanceRegistry rebalanceRegistry,
         NftInfo calldata nftInfo
@@ -28,6 +30,10 @@ contract RebalanceLib {
         uint256 newTokenId = nftManager.tokenOfOwnerByIndex(
             address(this), nftManager.balanceOf(address(this)) - 1
         );
+
+        if (newTokenId == key.tokenId) {
+            revert TokenIdUnchanged();
+        }
 
         (,,,,, int24 tickLower, int24 tickUpper,,,,,) =
             nftManager.positions(newTokenId);

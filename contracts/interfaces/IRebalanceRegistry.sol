@@ -19,6 +19,7 @@ struct RebalanceConfig {
     uint256 slippageBP;
     int24 minTickLow;
     int24 maxTickHigh;
+    uint8 delayMin;
 }
 
 struct NftInfo {

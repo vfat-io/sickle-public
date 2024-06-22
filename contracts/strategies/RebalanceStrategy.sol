@@ -27,6 +27,7 @@ import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
 import { Sickle } from "contracts/Sickle.sol";
 
 library RebalanceStrategyFees {
+    bytes4 constant Harvest = bytes4(keccak256("RebalanceHarvestFee"));
     bytes4 constant HarvestFor = bytes4(keccak256("RebalanceHarvestForFee"));
     bytes4 constant RebalanceLow = bytes4(keccak256("RebalanceLowFee"));
     bytes4 constant RebalanceMid = bytes4(keccak256("RebalanceMidFee"));
@@ -35,8 +36,10 @@ library RebalanceStrategyFees {
 
 contract RebalanceStrategy is RebalanceRegistry, StrategyModule {
     error TokenOutRequired();
+    error RebalanceConfigNotSet();
     error TickWithinRange();
     error TickOutsideMaxRange();
+    error NftSupplyChanged();
 
     struct DepositParams {
         address stakingContractAddress;
@@ -125,6 +128,10 @@ contract RebalanceStrategy is RebalanceRegistry, StrategyModule {
             RebalanceKey(sickle, nftInfo.nftManager, nftInfo.tokenId)
         );
 
+        if (config.tickLow == 0 && config.tickHigh == 0) {
+            revert RebalanceConfigNotSet();
+        }
+
         int24 tick = _get_curent_tick(nftInfo.pool);
 
         if (tick >= config.tickLow && tick <= config.tickHigh) {
@@ -133,6 +140,8 @@ contract RebalanceStrategy is RebalanceRegistry, StrategyModule {
         if (tick < config.minTickLow || tick > config.maxTickHigh) {
             revert TickOutsideMaxRange();
         }
+
+        uint256 nftTotalSupply = nftInfo.nftManager.totalSupply();
 
         address[] memory targets = new address[](9);
         bytes[] memory data = new bytes[](9);
@@ -205,6 +214,90 @@ contract RebalanceStrategy is RebalanceRegistry, StrategyModule {
         }
 
         sickle.multicall(targets, data);
+
+        if (nftTotalSupply != nftInfo.nftManager.totalSupply()) {
+            revert NftSupplyChanged();
+        }
+    }
+
+    function rebalance(
+        IUniswapV3Pool pool,
+        HarvestParams calldata harvestParams,
+        WithdrawParams calldata withdrawParams,
+        DepositParams calldata depositParams,
+        address[] memory sweepTokens
+    ) external {
+        if (withdrawParams.tokensOut.length == 0) {
+            revert TokenOutRequired();
+        }
+
+        Sickle sickle = getSickle(msg.sender);
+
+        address[] memory targets = new address[](8);
+        bytes[] memory data = new bytes[](8);
+
+        targets[0] =
+            connectorRegistry.connectorOf(harvestParams.stakingContractAddress);
+        data[0] = abi.encodeCall(
+            IFarmConnector.claim,
+            (harvestParams.stakingContractAddress, harvestParams.extraData)
+        );
+
+        targets[1] = address(feesLib);
+        data[1] = abi.encodeCall(
+            FeesLib.chargeFees,
+            (
+                strategyAddress,
+                RebalanceStrategyFees.Harvest,
+                harvestParams.tokensOut
+            )
+        );
+
+        targets[2] =
+            connectorRegistry.connectorOf(withdrawParams.stakingContractAddress);
+        data[2] = abi.encodeCall(
+            IFarmConnector.withdraw,
+            (
+                withdrawParams.stakingContractAddress,
+                withdrawParams.zapData.removeLiquidityData.lpAmountIn,
+                withdrawParams.extraData
+            )
+        );
+
+        targets[3] = address(zapLib);
+        data[3] = abi.encodeCall(ZapLib.zapOut, (withdrawParams.zapData));
+
+        targets[4] = address(feesLib);
+        data[4] = abi.encodeCall(
+            FeesLib.chargeFees,
+            (
+                strategyAddress,
+                _get_rebalance_fee(pool),
+                withdrawParams.tokensOut
+            )
+        );
+
+        targets[5] = address(zapLib);
+        data[5] = abi.encodeCall(ZapLib.zapIn, (depositParams.zapData));
+
+        targets[6] =
+            connectorRegistry.connectorOf(depositParams.stakingContractAddress);
+        data[6] = abi.encodeCall(
+            IFarmConnector.deposit,
+            (
+                depositParams.stakingContractAddress,
+                depositParams.zapData.addLiquidityData.lpToken,
+                depositParams.extraData
+            )
+        );
+
+        if (sweepTokens.length > 0) {
+            targets[7] = address(transferLib);
+            data[7] =
+                abi.encodeCall(TransferLib.transferTokensToUser, (sweepTokens));
+        }
+
+        sickle.multicall(targets, data);
     }
 
     /* Internal functions */
@@ -217,7 +310,7 @@ contract RebalanceStrategy is RebalanceRegistry, StrategyModule {
         int24 tick;
 
         assembly {
-            tick := mload(add(add(result, 0x20), 32))
+            tick := mload(add(add(result, 32), 32))
         }
 
         return tick;
