@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import { IFarmConnector, Farm } from "contracts/interfaces/IFarmConnector.sol";
 import { ICLGauge } from "contracts/interfaces/external/aerodrome/ICLGauge.sol";
 import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { IERC721Enumerable } from
@@ -25,7 +25,7 @@ struct VelodromeSlipstreamGaugeWithdrawExtraData {
 
 contract VelodromeSlipstreamGaugeConnector is IFarmConnector {
     function deposit(
-        address target,
+        Farm calldata farm,
         address token,
         bytes memory extraData
     ) external payable override {
@@ -35,23 +35,26 @@ contract VelodromeSlipstreamGaugeConnector is IFarmConnector {
             address(this), data.tokenBalance
         );
 
-        IERC721(token).approve(target, tokenId);
-        ICLGauge(target).deposit(tokenId);
+        IERC721(token).approve(farm.stakingContract, tokenId);
+        ICLGauge(farm.stakingContract).deposit(tokenId);
     }
 
     function withdraw(
-        address target,
+        Farm calldata farm,
         uint256, // amount
         bytes memory extraData
     ) external override {
         VelodromeSlipstreamGaugeWithdrawExtraData memory data =
             abi.decode(extraData, (VelodromeSlipstreamGaugeWithdrawExtraData));
-        ICLGauge(target).withdraw(data.tokenId);
+        ICLGauge(farm.stakingContract).withdraw(data.tokenId);
     }
 
-    function claim(address target, bytes memory extraData) external override {
+    function claim(
+        Farm calldata farm,
+        bytes memory extraData
+    ) external override {
         VelodromeSlipstreamGaugeClaimExtraData memory data =
             abi.decode(extraData, (VelodromeSlipstreamGaugeClaimExtraData));
-        ICLGauge(target).getReward(data.tokenId);
+        ICLGauge(farm.stakingContract).getReward(data.tokenId);
     }
 }

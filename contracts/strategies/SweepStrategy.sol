@@ -9,6 +9,10 @@ import {
     StrategyModule,
     ConnectorRegistry
 } from "contracts/modules/StrategyModule.sol";
+import { IERC721 } from
+    "lib/openzeppelin-contracts/contracts/interfaces/IERC721.sol";
+import { IERC1155 } from
+    "lib/openzeppelin-contracts/contracts/interfaces/IERC1155.sol";
 
 contract SweepStrategy is StrategyModule {
     error InvalidInputLength(); //0x7db491eb
@@ -38,7 +42,7 @@ contract SweepStrategy is StrategyModule {
     }
 
     function sweepErc721(
-        address[] memory tokens,
+        IERC721[] memory tokens,
         uint256[] memory tokenIds
     ) public {
         Sickle sickle = getSickle(msg.sender);
@@ -66,7 +70,7 @@ contract SweepStrategy is StrategyModule {
     }
 
     function sweepErc1155(
-        address[] memory tokens,
+        IERC1155[] memory tokens,
         uint256[] memory tokenIds,
         uint256[] memory amounts
     ) public {

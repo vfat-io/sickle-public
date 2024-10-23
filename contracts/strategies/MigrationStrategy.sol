@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 import { Sickle } from "contracts/Sickle.sol";
 import { SickleFactory } from "contracts/SickleFactory.sol";
 import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
-import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import { IFarmConnector, Farm } from "contracts/interfaces/IFarmConnector.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
@@ -15,6 +15,16 @@ interface IOldSickle {
         bool[] calldata isDelegateCall,
         uint256[] calldata values
     ) external payable;
+}
+
+interface IOldFarmConnector {
+    function claim(address stakingContract, bytes calldata data) external;
+
+    function withdraw(
+        address stakingContract,
+        uint256 amount,
+        bytes calldata data
+    ) external;
 }
 
 contract MigrationStrategy {
@@ -49,7 +59,7 @@ contract MigrationStrategy {
     }
 
     struct MigrationInfo {
-        address stakingContractAddress;
+        Farm farm;
         address lpToken;
         address rewardToken;
         bytes withdrawExtraData;
@@ -78,15 +88,14 @@ contract MigrationStrategy {
         bool[] memory isDelegateCall = new bool[](4);
         uint256[] memory values = new uint256[](4);
 
-        address oldFarmConnector = oldConnectorRegistry.connectorOf(
-            migrationInfo.stakingContractAddress
-        );
+        address oldFarmConnector =
+            oldConnectorRegistry.connectorOf(migrationInfo.farm.stakingContract);
 
         targets[0] = oldFarmConnector;
         data[0] = abi.encodeCall(
-            IFarmConnector.withdraw,
+            IOldFarmConnector.withdraw,
             (
-                migrationInfo.stakingContractAddress,
+                migrationInfo.farm.stakingContract,
                 migrationInfo.amount,
                 migrationInfo.withdrawExtraData
             )
@@ -101,8 +110,8 @@ contract MigrationStrategy {
 
         targets[2] = oldFarmConnector;
         data[2] = abi.encodeCall(
-            IFarmConnector.claim,
-            (migrationInfo.stakingContractAddress, migrationInfo.claimExtraData)
+            IOldFarmConnector.claim,
+            (migrationInfo.farm.stakingContract, migrationInfo.claimExtraData)
         );
         isDelegateCall[2] = true;
 
@@ -115,7 +124,7 @@ contract MigrationStrategy {
         oldSickle.multicall(targets, data, isDelegateCall, values);
 
         address farmConnector =
-            connectorRegistry.connectorOf(migrationInfo.stakingContractAddress);
+            connectorRegistry.connectorOf(migrationInfo.farm.stakingContract);
 
         address[] memory targets2 = new address[](1);
         bytes[] memory data2 = new bytes[](1);
@@ -124,7 +133,7 @@ contract MigrationStrategy {
         data2[0] = abi.encodeCall(
             IFarmConnector.deposit,
             (
-                migrationInfo.stakingContractAddress,
+                migrationInfo.farm,
                 migrationInfo.lpToken,
                 migrationInfo.depositExtraData
             )

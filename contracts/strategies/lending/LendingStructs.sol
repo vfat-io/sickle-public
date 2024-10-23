@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { SwapData } from "contracts/libraries/SwapLib.sol";
+import { SwapParams } from "contracts/libraries/SwapLib.sol";
 
 library LendingStrategyFees {
     bytes4 constant Deposit = bytes4(keccak256("LendingStrategyDepositFee"));
@@ -23,7 +23,8 @@ contract LendingStructs {
         address token;
         uint256 amountIn; // Amount transferred from user
         bytes extraData;
-        SwapData optionalSwap; // Swap the flashloan asset to the supplied token
+        SwapParams optionalSwap; // Swap the flashloan asset to the supplied
+            // token
     }
 
     struct DecreaseParams {
@@ -32,6 +33,6 @@ contract LendingStructs {
         uint256 repayAmount;
         uint256 redeemAmount;
         bytes extraData;
-        SwapData optionalSwap; // After redeeming, swap to pay the flashloan
+        SwapParams optionalSwap; // After redeeming, swap to pay the flashloan
     }
 }

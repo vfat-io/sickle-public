@@ -8,9 +8,9 @@ import { FlashloanStrategy } from "contracts/strategies/FlashloanStrategy.sol";
 import { FlashloanInitiator } from
     "contracts/strategies/lending/FlashloanInitiator.sol";
 import { TransferLib } from "contracts/libraries/TransferLib.sol";
-import { ZapLib, ZapInData, ZapOutData } from "contracts/libraries/ZapLib.sol";
+import { ZapLib, ZapIn, ZapOut } from "contracts/libraries/ZapLib.sol";
 import { FeesLib } from "contracts/libraries/FeesLib.sol";
-import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
+import { IFarmConnector, Farm } from "contracts/interfaces/IFarmConnector.sol";
 import { LendingStrategyFees } from
     "contracts/strategies/lending/LendingStructs.sol";
 import { StrategyModule } from "contracts/modules/StrategyModule.sol";
@@ -28,18 +28,18 @@ contract LendingStrategy is FlashloanInitiator, StrategyModule {
     struct DepositParams {
         address tokenIn;
         uint256 amountIn;
-        ZapInData zapData;
+        ZapIn zap;
     }
 
     struct WithdrawParams {
         address tokenOut;
-        ZapOutData zapData;
+        ZapOut zap;
     }
 
     struct CompoundParams {
-        address stakingContract;
+        Farm farm;
         bytes extraData;
-        ZapInData zapData;
+        ZapIn zap;
     }
 
     TransferLib public immutable transferLib;
@@ -94,7 +94,7 @@ contract LendingStrategy is FlashloanInitiator, StrategyModule {
         );
 
         targets[1] = address(zapLib);
-        data[1] = abi.encodeCall(ZapLib.zapIn, (depositParams.zapData));
+        data[1] = abi.encodeCall(ZapLib.zapIn, (depositParams.zap));
 
         sickle.multicall{ value: msg.value }(targets, data);
 
@@ -127,7 +127,7 @@ contract LendingStrategy is FlashloanInitiator, StrategyModule {
         bytes[] memory data = new bytes[](3);
 
         targets[0] = address(zapLib);
-        data[0] = abi.encodeCall(ZapLib.zapOut, (withdrawParams.zapData));
+        data[0] = abi.encodeCall(ZapLib.zapOut, (withdrawParams.zap));
 
         targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
@@ -162,14 +162,14 @@ contract LendingStrategy is FlashloanInitiator, StrategyModule {
         bytes[] memory data = new bytes[](3);
 
         targets[0] =
-            connectorRegistry.connectorOf(compoundParams.stakingContract);
+            connectorRegistry.connectorOf(compoundParams.farm.stakingContract);
         data[0] = abi.encodeCall(
             IFarmConnector.claim,
-            (compoundParams.stakingContract, compoundParams.extraData)
+            (compoundParams.farm, compoundParams.extraData)
         );
 
         targets[1] = address(zapLib);
-        data[1] = abi.encodeCall(ZapLib.zapIn, (compoundParams.zapData));
+        data[1] = abi.encodeCall(ZapLib.zapIn, (compoundParams.zap));
 
         address flashloanToken = flashloanParams.flashloanAssets[0]
             == address(0)

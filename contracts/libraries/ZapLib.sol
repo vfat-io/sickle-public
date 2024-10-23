@@ -4,74 +4,69 @@ pragma solidity ^0.8.17;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import {
-    ILiquidityConnector,
-    SwapData,
-    AddLiquidityData,
-    RemoveLiquidityData
-} from "contracts/interfaces/ILiquidityConnector.sol";
-import { SwapLib } from "contracts/libraries/SwapLib.sol";
+    SwapParams,
+    AddLiquidityParams
+} from "contracts/structs/LiquidityStructs.sol";
+import { ILiquidityConnector } from
+    "contracts/interfaces/ILiquidityConnector.sol";
 import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
 import { DelegateModule } from "contracts/modules/DelegateModule.sol";
+import { ZapIn, ZapOut } from "contracts/structs/ZapStructs.sol";
+import { IZapLib } from "contracts/interfaces/libraries/IZapLib.sol";
+import { ISwapLib } from "contracts/interfaces/libraries/ISwapLib.sol";
 
-struct ZapInData {
-    SwapData[] swaps;
-    AddLiquidityData addLiquidityData;
-}
-
-struct ZapOutData {
-    RemoveLiquidityData removeLiquidityData;
-    SwapData[] swaps;
-}
-
-contract ZapLib is DelegateModule {
+contract ZapLib is DelegateModule, IZapLib {
     error LiquidityAmountError(); // 0x4d0ab6b4
 
-    SwapLib public immutable swapLib;
+    ISwapLib public immutable swapLib;
     ConnectorRegistry public immutable connectorRegistry;
 
-    constructor(ConnectorRegistry connectorRegistry_, SwapLib swapLib_) {
+    constructor(ConnectorRegistry connectorRegistry_, ISwapLib swapLib_) {
         connectorRegistry = connectorRegistry_;
         swapLib = swapLib_;
     }
 
-    function zapIn(ZapInData memory zapData) external payable {
-        uint256 swapDataLength = zapData.swaps.length;
+    function zapIn(
+        ZapIn memory zap
+    ) external payable {
+        uint256 swapDataLength = zap.swaps.length;
         for (uint256 i; i < swapDataLength;) {
             _delegateTo(
-                address(swapLib),
-                abi.encodeCall(SwapLib.swap, (zapData.swaps[i]))
+                address(swapLib), abi.encodeCall(ISwapLib.swap, (zap.swaps[i]))
             );
             unchecked {
                 i++;
             }
         }
 
-        if (zapData.addLiquidityData.lpToken == address(0)) {
+        if (zap.addLiquidityParams.lpToken == address(0)) {
             return;
         }
 
         bool atLeastOneNonZero = false;
 
-        AddLiquidityData memory addLiquidityData = zapData.addLiquidityData;
-        uint256 addLiquidityDataTokensLength = addLiquidityData.tokens.length;
-        for (uint256 i; i < addLiquidityDataTokensLength; i++) {
-            if (addLiquidityData.tokens[i] == address(0)) {
+        AddLiquidityParams memory addLiquidityParams = zap.addLiquidityParams;
+        uint256 addLiquidityParamsTokensLength =
+            addLiquidityParams.tokens.length;
+        for (uint256 i; i < addLiquidityParamsTokensLength; i++) {
+            if (addLiquidityParams.tokens[i] == address(0)) {
                 continue;
             }
-            if (addLiquidityData.desiredAmounts[i] == 0) {
-                addLiquidityData.desiredAmounts[i] =
-                    IERC20(addLiquidityData.tokens[i]).balanceOf(address(this));
+            if (addLiquidityParams.desiredAmounts[i] == 0) {
+                addLiquidityParams.desiredAmounts[i] = IERC20(
+                    addLiquidityParams.tokens[i]
+                ).balanceOf(address(this));
             }
-            if (addLiquidityData.desiredAmounts[i] > 0) {
+            if (addLiquidityParams.desiredAmounts[i] > 0) {
                 atLeastOneNonZero = true;
                 // In case there is USDT or similar dust approval, revoke it
                 SafeTransferLib.safeApprove(
-                    addLiquidityData.tokens[i], addLiquidityData.router, 0
+                    addLiquidityParams.tokens[i], addLiquidityParams.router, 0
                 );
                 SafeTransferLib.safeApprove(
-                    addLiquidityData.tokens[i],
-                    addLiquidityData.router,
-                    addLiquidityData.desiredAmounts[i]
+                    addLiquidityParams.tokens[i],
+                    addLiquidityParams.router,
+                    addLiquidityParams.desiredAmounts[i]
                 );
             }
         }
@@ -81,18 +76,20 @@ contract ZapLib is DelegateModule {
         }
 
         address routerConnector =
-            connectorRegistry.connectorOf(addLiquidityData.router);
+            connectorRegistry.connectorOf(addLiquidityParams.router);
 
         _delegateTo(
             routerConnector,
-            abi.encodeCall(ILiquidityConnector.addLiquidity, (addLiquidityData))
+            abi.encodeCall(
+                ILiquidityConnector.addLiquidity, (addLiquidityParams)
+            )
         );
 
-        for (uint256 i; i < addLiquidityDataTokensLength;) {
-            if (addLiquidityData.tokens[i] != address(0)) {
+        for (uint256 i; i < addLiquidityParamsTokensLength;) {
+            if (addLiquidityParams.tokens[i] != address(0)) {
                 // Revoke any dust approval in case the amount was estimated
                 SafeTransferLib.safeApprove(
-                    addLiquidityData.tokens[i], addLiquidityData.router, 0
+                    addLiquidityParams.tokens[i], addLiquidityParams.router, 0
                 );
             }
             unchecked {
@@ -101,32 +98,32 @@ contract ZapLib is DelegateModule {
         }
     }
 
-    function zapOut(ZapOutData memory zapData) external {
-        if (zapData.removeLiquidityData.lpToken != address(0)) {
-            if (zapData.removeLiquidityData.lpAmountIn > 0) {
+    function zapOut(
+        ZapOut memory zap
+    ) external {
+        if (zap.removeLiquidityParams.lpToken != address(0)) {
+            if (zap.removeLiquidityParams.lpAmountIn > 0) {
                 SafeTransferLib.safeApprove(
-                    zapData.removeLiquidityData.lpToken,
-                    zapData.removeLiquidityData.router,
-                    zapData.removeLiquidityData.lpAmountIn
+                    zap.removeLiquidityParams.lpToken,
+                    zap.removeLiquidityParams.router,
+                    zap.removeLiquidityParams.lpAmountIn
                 );
             }
-            address routerConnector = connectorRegistry.connectorOf(
-                zapData.removeLiquidityData.router
-            );
+            address routerConnector =
+                connectorRegistry.connectorOf(zap.removeLiquidityParams.router);
             _delegateTo(
                 address(routerConnector),
                 abi.encodeCall(
                     ILiquidityConnector.removeLiquidity,
-                    zapData.removeLiquidityData
+                    zap.removeLiquidityParams
                 )
             );
         }
 
-        uint256 swapDataLength = zapData.swaps.length;
+        uint256 swapDataLength = zap.swaps.length;
         for (uint256 i; i < swapDataLength;) {
             _delegateTo(
-                address(swapLib),
-                abi.encodeCall(SwapLib.swap, (zapData.swaps[i]))
+                address(swapLib), abi.encodeCall(ISwapLib.swap, (zap.swaps[i]))
             );
             unchecked {
                 i++;

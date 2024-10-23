@@ -6,13 +6,9 @@ import { WETH } from "solmate/tokens/WETH.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Sickle } from "contracts/Sickle.sol";
 import { SickleRegistry } from "contracts/SickleRegistry.sol";
+import { IFeesLib } from "contracts/interfaces/libraries/IFeesLib.sol";
 
-contract FeesLib {
-    event FeeCharged(
-        address strategy, bytes4 feeDescriptor, uint256 amount, address token
-    );
-    event TransactionCostCharged(address recipient, uint256 amount);
-
+contract FeesLib is IFeesLib {
     /// @notice Fees library version
     uint256 public constant VERSION = 1;
 
@@ -60,13 +56,13 @@ contract FeesLib {
             }
         }
 
-        if (fee == 0) {
+        uint256 amountToCharge = feeBasis * fee / 10_000;
+
+        if (amountToCharge == 0) {
             return feeBasis;
         }
 
-        uint256 amountToCharge = feeBasis * fee / 10_000;
-
-        if (feeToken == 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE) {
+        if (feeToken == ETH) {
             SafeTransferLib.safeTransferETH(
                 registry.collector(), amountToCharge
             );
@@ -84,7 +80,7 @@ contract FeesLib {
         address strategy,
         bytes4 feeDescriptor,
         address[] memory feeTokens
-    ) external {
+    ) external payable {
         for (uint256 i = 0; i < feeTokens.length;) {
             chargeFee(strategy, feeDescriptor, feeTokens[i], 0);
             unchecked {

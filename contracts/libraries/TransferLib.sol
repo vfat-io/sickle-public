@@ -7,32 +7,29 @@ import { Sickle } from "contracts/Sickle.sol";
 import { SafeTransferLib } from "lib/solmate/src/utils/SafeTransferLib.sol";
 import { IERC20 } from
     "lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { FeesLib } from "contracts/libraries/FeesLib.sol";
+import { IFeesLib } from "contracts/interfaces/libraries/IFeesLib.sol";
 import { DelegateModule } from "contracts/modules/DelegateModule.sol";
+import { ITransferLib } from "contracts/interfaces/libraries/ITransferLib.sol";
 
-contract TransferLib is MsgValueModule, DelegateModule {
-    error ArrayLengthMismatch();
-    error TokenInRequired();
-
+contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     WETH public immutable weth;
 
-    FeesLib public immutable feesLib;
+    IFeesLib public immutable feesLib;
 
-    constructor(FeesLib feseLib_, WETH weth_) {
-        feesLib = feseLib_;
+    constructor(IFeesLib feesLib_, WETH weth_) {
+        feesLib = feesLib_;
         weth = weth_;
     }
 
     /// @dev Transfers the balance of {token} from the contract to the
     /// sickle owner
     /// @param token Address of the token to transfer
-    function transferTokenToUser(address token) public payable {
+    function transferTokenToUser(
+        address token
+    ) public payable checkTransferTo(token) {
         address recipient = Sickle(payable(address(this))).owner();
-        if (token == address(0)) {
-            return;
-        }
         if (token == ETH) {
             uint256 wethBalance = weth.balanceOf(address(this));
             if (wethBalance > 0) {
@@ -54,8 +51,10 @@ contract TransferLib is MsgValueModule, DelegateModule {
     /// @dev Transfers all balances of {tokens} and/or ETH from the contract
     /// to the sickle owner
     /// @param tokens An array of token addresses
-    function transferTokensToUser(address[] memory tokens) external payable {
-        for (uint256 i = 0; i != tokens.length;) {
+    function transferTokensToUser(
+        address[] memory tokens
+    ) external payable checkTransfersTo(tokens) {
+        for (uint256 i; i != tokens.length;) {
             transferTokenToUser(tokens[i]);
 
             unchecked {
@@ -76,7 +75,7 @@ contract TransferLib is MsgValueModule, DelegateModule {
         uint256 amountIn,
         address strategy,
         bytes4 feeSelector
-    ) public payable {
+    ) public payable checkTransferFrom(tokenIn, amountIn) {
         _checkMsgValue(amountIn, tokenIn == ETH);
 
         _transferTokenFromUser(tokenIn, amountIn, strategy, feeSelector);
@@ -94,16 +93,10 @@ contract TransferLib is MsgValueModule, DelegateModule {
         uint256[] memory amountsIn,
         address strategy,
         bytes4 feeSelector
-    ) external payable {
-        if (tokensIn.length != amountsIn.length) {
-            revert ArrayLengthMismatch();
-        }
-        if (tokensIn.length == 0) {
-            revert TokenInRequired();
-        }
+    ) external payable checkTransfersFrom(tokensIn, amountsIn) {
         bool hasEth = false;
 
-        for (uint256 i = 0; i < tokensIn.length; i++) {
+        for (uint256 i; i < tokensIn.length; i++) {
             if (tokensIn[i] == ETH) {
                 _checkMsgValue(amountsIn[i], true);
                 hasEth = true;
@@ -139,7 +132,7 @@ contract TransferLib is MsgValueModule, DelegateModule {
         bytes memory result = _delegateTo(
             address(feesLib),
             abi.encodeCall(
-                FeesLib.chargeFee, (strategy, feeSelector, tokenIn, 0)
+                IFeesLib.chargeFee, (strategy, feeSelector, tokenIn, 0)
             )
         );
         uint256 remainder = abi.decode(result, (uint256));
@@ -147,5 +140,67 @@ contract TransferLib is MsgValueModule, DelegateModule {
         if (tokenIn == ETH) {
             weth.deposit{ value: remainder }();
         }
+    }
+
+    modifier checkTransferFrom(address tokenIn, uint256 amountIn) {
+        if (tokenIn == address(0)) {
+            revert TokenInRequired();
+        }
+        if (amountIn == 0) {
+            revert AmountInRequired();
+        }
+        _;
+    }
+
+    modifier checkTransfersFrom(
+        address[] memory tokensIn,
+        uint256[] memory amountsIn
+    ) {
+        uint256 tokenLength = tokensIn.length;
+        if (tokenLength != amountsIn.length) {
+            revert ArrayLengthMismatch();
+        }
+        if (tokenLength == 0) {
+            revert TokenInRequired();
+        }
+        for (uint256 i; i < tokenLength; i++) {
+            if (tokensIn[i] == address(0)) {
+                revert TokenInRequired();
+            }
+            if (amountsIn[i] == 0) {
+                revert AmountInRequired();
+            }
+        }
+        if (tokenLength == 2 && tokensIn[0] == tokensIn[1]) {
+            revert SameTokenIn();
+        }
+        if (tokenLength > 2) {
+            revert TwoTokenMaximum();
+        }
+        _;
+    }
+
+    modifier checkTransferTo(
+        address tokenOut
+    ) {
+        if (tokenOut == address(0)) {
+            revert TokenOutRequired();
+        }
+        _;
+    }
+
+    modifier checkTransfersTo(
+        address[] memory tokensOut
+    ) {
+        uint256 tokenLength = tokensOut.length;
+        if (tokenLength == 0) {
+            revert TokenOutRequired();
+        }
+        for (uint256 i; i < tokenLength; i++) {
+            if (tokensOut[i] == address(0)) {
+                revert TokenOutRequired();
+            }
+        }
+        _;
     }
 }

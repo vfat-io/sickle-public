@@ -7,7 +7,7 @@ import { SickleRegistry } from "contracts/SickleRegistry.sol";
 
 /// @title Sickle contract
 /// @author vfat.tools
-/// @notice Sickle facilitates farming and interactions with MasterChef
+/// @notice Sickle facilitates farming and interactions with Masterchef
 /// contracts
 /// @dev Base contract inheriting from all the other "manager" contracts
 contract Sickle is SickleStorage, Multicall {
@@ -15,10 +15,9 @@ contract Sickle is SickleStorage, Multicall {
     receive() external payable { }
 
     /// @param sickleRegistry_ Address of the SickleRegistry contract
-    constructor(SickleRegistry sickleRegistry_)
-        initializer
-        Multicall(sickleRegistry_)
-    {
+    constructor(
+        SickleRegistry sickleRegistry_
+    ) initializer Multicall(sickleRegistry_) {
         _Sickle_initialize(address(0), address(0));
     }
 

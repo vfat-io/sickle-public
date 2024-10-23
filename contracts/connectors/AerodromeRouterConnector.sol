@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import { IRouter } from "contracts/interfaces/external/aerodrome/IRouter.sol";
+import { IPool } from "contracts/interfaces/external/aerodrome/IPool.sol";
+
 import {
     ILiquidityConnector,
-    AddLiquidityData,
-    RemoveLiquidityData,
-    SwapData
+    AddLiquidityParams,
+    RemoveLiquidityParams,
+    SwapParams,
+    GetAmountOutParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
-import { IRouter } from "contracts/interfaces/external/aerodrome/IRouter.sol";
 
 struct AerodromeLiquidityExtraData {
     bool isStablePool;
@@ -18,59 +21,62 @@ struct AerodromeSwapExtraData {
 }
 
 contract AerodromeRouterConnector is ILiquidityConnector {
-    function addLiquidity(AddLiquidityData memory addLiquidityData)
-        external
-        payable
-        override
-    {
+    function addLiquidity(
+        AddLiquidityParams memory addLiquidityParams
+    ) external payable override {
         AerodromeLiquidityExtraData memory _extraData = abi.decode(
-            addLiquidityData.extraData, (AerodromeLiquidityExtraData)
+            addLiquidityParams.extraData, (AerodromeLiquidityExtraData)
         );
-        IRouter(addLiquidityData.router).addLiquidity(
-            addLiquidityData.tokens[0],
-            addLiquidityData.tokens[1],
+        IRouter(addLiquidityParams.router).addLiquidity(
+            addLiquidityParams.tokens[0],
+            addLiquidityParams.tokens[1],
             _extraData.isStablePool,
-            addLiquidityData.desiredAmounts[0],
-            addLiquidityData.desiredAmounts[1],
-            addLiquidityData.minAmounts[0],
-            addLiquidityData.minAmounts[1],
+            addLiquidityParams.desiredAmounts[0],
+            addLiquidityParams.desiredAmounts[1],
+            addLiquidityParams.minAmounts[0],
+            addLiquidityParams.minAmounts[1],
             address(this),
             block.timestamp
         );
     }
 
-    function removeLiquidity(RemoveLiquidityData memory removeLiquidityData)
-        external
-        override
-    {
+    function removeLiquidity(
+        RemoveLiquidityParams memory removeLiquidityParams
+    ) external override {
         AerodromeLiquidityExtraData memory _extraData = abi.decode(
-            removeLiquidityData.extraData, (AerodromeLiquidityExtraData)
+            removeLiquidityParams.extraData, (AerodromeLiquidityExtraData)
         );
-        IRouter(removeLiquidityData.router).removeLiquidity(
-            removeLiquidityData.tokens[0],
-            removeLiquidityData.tokens[1],
+        IRouter(removeLiquidityParams.router).removeLiquidity(
+            removeLiquidityParams.tokens[0],
+            removeLiquidityParams.tokens[1],
             _extraData.isStablePool,
-            removeLiquidityData.lpAmountIn,
-            removeLiquidityData.minAmountsOut[0],
-            removeLiquidityData.minAmountsOut[1],
+            removeLiquidityParams.lpAmountIn,
+            removeLiquidityParams.minAmountsOut[0],
+            removeLiquidityParams.minAmountsOut[1],
             address(this),
             block.timestamp
         );
     }
 
-    function swapExactTokensForTokens(SwapData memory swapData)
-        external
-        payable
-        override
-    {
+    function swapExactTokensForTokens(
+        SwapParams memory swap
+    ) external payable override {
         AerodromeSwapExtraData memory _extraData =
-            abi.decode(swapData.extraData, (AerodromeSwapExtraData));
-        IRouter(swapData.router).swapExactTokensForTokens(
-            swapData.amountIn,
-            swapData.minAmountOut,
+            abi.decode(swap.extraData, (AerodromeSwapExtraData));
+        IRouter(swap.router).swapExactTokensForTokens(
+            swap.amountIn,
+            swap.minAmountOut,
             _extraData.routes,
             address(this),
             block.timestamp
+        );
+    }
+
+    function getAmountOut(
+        GetAmountOutParams memory getAmountOutParams
+    ) external view override returns (uint256) {
+        return IPool(getAmountOutParams.lpToken).getAmountOut(
+            getAmountOutParams.amountIn, getAmountOutParams.tokenIn
         );
     }
 }

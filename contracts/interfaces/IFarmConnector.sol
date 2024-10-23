@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import { Farm } from "contracts/structs/FarmStrategyStructs.sol";
+
 interface IFarmConnector {
     function deposit(
-        address target,
+        Farm calldata farm,
         address token,
         bytes memory extraData
     ) external payable;
 
     function withdraw(
-        address target,
+        Farm calldata farm,
         uint256 amount,
         bytes memory extraData
     ) external;
 
-    function claim(address target, bytes memory extraData) external;
+    function claim(Farm calldata farm, bytes memory extraData) external;
 }

@@ -12,7 +12,7 @@ import {
     Sickle,
     ConnectorRegistry
 } from "contracts/modules/StrategyModule.sol";
-import { SwapData } from "contracts/interfaces/ILiquidityConnector.sol";
+import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
 import { TransferLib } from "contracts/libraries/TransferLib.sol";
 import { SwapLib } from "contracts/libraries/SwapLib.sol";
 import { LendingStrategyFees } from
@@ -101,7 +101,7 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, StrategyModule {
 
     /// @notice Repay asset B loan with flashloan, withdraw collateral asset A
     function repay_and_withdraw(
-        SwapData calldata interestSwapData,
+        SwapParams calldata interestSwapParams,
         DecreaseParams calldata decreaseParams,
         FlashloanParams calldata flashloanParams,
         RedeemParams calldata collateralTokenParams,
@@ -117,13 +117,13 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, StrategyModule {
             ILendingConnector.redeemUnderlying,
             (
                 collateralTokenParams.market,
-                interestSwapData.amountIn,
+                interestSwapParams.amountIn,
                 collateralTokenParams.extraData
             )
         );
 
         targets[1] = address(swapLib);
-        data[1] = abi.encodeCall(SwapLib.swap, (interestSwapData));
+        data[1] = abi.encodeCall(SwapLib.swap, (interestSwapParams));
 
         sickle.multicall(targets, data);
 

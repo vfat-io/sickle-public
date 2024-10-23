@@ -3,9 +3,10 @@ pragma solidity ^0.8.0;
 
 import {
     ILiquidityConnector,
-    AddLiquidityData,
-    RemoveLiquidityData,
-    SwapData
+    AddLiquidityParams,
+    RemoveLiquidityParams,
+    SwapParams,
+    GetAmountOutParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
 import { IUniswapV2Router02 } from
     "contracts/interfaces/external/uniswap/IUniswapV2Router02.sol";
@@ -16,19 +17,21 @@ struct VelocoreExtraData {
 }
 
 contract VelocoreConnector is ILiquidityConnector {
+    error NotImplemented();
+
     address public immutable wethContractAddress;
 
-    constructor(address wethContractAddress_) {
+    constructor(
+        address wethContractAddress_
+    ) {
         wethContractAddress = wethContractAddress_;
     }
 
-    function swapExactTokensForTokens(SwapData memory swapData)
-        external
-        payable
-        override
-    {
+    function swapExactTokensForTokens(
+        SwapParams memory swap
+    ) external payable override {
         VelocoreExtraData memory extraData =
-            abi.decode(swapData.extraData, (VelocoreExtraData));
+            abi.decode(swap.extraData, (VelocoreExtraData));
 
         uint256 length = extraData.path.length;
         for (uint256 i; i < length;) {
@@ -43,19 +46,20 @@ contract VelocoreConnector is ILiquidityConnector {
         uint256[] memory amountsOut;
 
         if (extraData.path[0] == address(0)) {
-            IWETH9(wethContractAddress).withdraw(swapData.amountIn);
-            amountsOut = IUniswapV2Router02(swapData.router)
-                .swapExactETHForTokens{ value: swapData.amountIn }(
-                swapData.minAmountOut,
+            IWETH9(wethContractAddress).withdraw(swap.amountIn);
+            amountsOut = IUniswapV2Router02(swap.router).swapExactETHForTokens{
+                value: swap.amountIn
+            }(
+                swap.minAmountOut,
                 extraData.path,
                 address(this),
                 block.timestamp + 1
             );
         } else {
-            amountsOut = IUniswapV2Router02(swapData.router)
+            amountsOut = IUniswapV2Router02(swap.router)
                 .swapExactTokensForTokens(
-                swapData.amountIn,
-                swapData.minAmountOut,
+                swap.amountIn,
+                swap.minAmountOut,
                 extraData.path,
                 address(this),
                 block.timestamp + 1
@@ -69,15 +73,21 @@ contract VelocoreConnector is ILiquidityConnector {
         }
     }
 
-    function addLiquidity(AddLiquidityData memory) external payable override {
-        revert("Not implemented");
+    function addLiquidity(
+        AddLiquidityParams memory
+    ) external payable override {
+        revert NotImplemented();
     }
 
-    function removeLiquidity(RemoveLiquidityData memory)
-        external
-        pure
-        override
-    {
-        revert("Not implemented");
+    function removeLiquidity(
+        RemoveLiquidityParams memory
+    ) external pure override {
+        revert NotImplemented();
+    }
+
+    function getAmountOut(
+        GetAmountOutParams memory
+    ) external pure override returns (uint256) {
+        revert NotImplemented();
     }
 }
