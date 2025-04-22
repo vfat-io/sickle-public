@@ -42,4 +42,25 @@ contract EqualizerGaugeConnector is IFarmConnector {
             address(this), equalizerextraData.rewardTokens
         );
     }
+
+    function balanceOf(
+        Farm calldata farm,
+        address user
+    ) external view override returns (uint256) {
+        return IEqualizerGauge(farm.stakingContract).balanceOf(user);
+    }
+
+    function earned(
+        Farm calldata farm,
+        address user,
+        address[] calldata rewardTokens
+    ) external view override returns (uint256[] memory) {
+        uint256[] memory rewards = new uint256[](rewardTokens.length);
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            rewards[i] = IEqualizerGauge(farm.stakingContract).earned(
+                rewardTokens[i], user
+            );
+        }
+        return rewards;
+    }
 }

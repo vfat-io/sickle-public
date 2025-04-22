@@ -4,11 +4,12 @@ pragma solidity ^0.8.0;
 import {
     AddLiquidityParams,
     RemoveLiquidityParams,
-    SwapParams,
-    GetAmountOutParams
+    SwapParams
 } from "contracts/structs/LiquidityStructs.sol";
 
 interface ILiquidityConnector {
+    error InvalidPrice();
+
     function addLiquidity(
         AddLiquidityParams memory addLiquidityParams
     ) external payable;
@@ -21,7 +22,17 @@ interface ILiquidityConnector {
         SwapParams memory swap
     ) external payable;
 
-    function getAmountOut(
-        GetAmountOutParams memory getAmountOutParams
+    function getPoolPrice(
+        address lpToken,
+        uint256 baseTokenIndex,
+        uint256 quoteTokenIndex
     ) external view returns (uint256);
+
+    function getReserves(
+        address lpToken
+    ) external view returns (uint256[] memory reserves);
+
+    function getTokens(
+        address lpToken
+    ) external view returns (address[] memory tokens);
 }

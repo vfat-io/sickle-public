@@ -7,6 +7,30 @@ import {
 } from "contracts/structs/PositionSettingsStructs.sol";
 
 interface IPositionSettingsRegistry {
+    error InvalidStakingContract();
+    error InvalidPool();
+    error InvalidRouter();
+    error SickleNotDeployed();
+    error AutoHarvestNotSet();
+    error AutoCompoundNotSet();
+    error RewardBehaviorNotSet();
+    error AutoExitNotSet();
+    error ConditionsNotMet();
+    error InvalidPrice();
+    error InvalidTokenOut();
+    error ExitTriggersNotSet();
+    error InvalidSlippageBP();
+    error InvalidPriceImpactBP();
+    error OnlySickle();
+    error NonZeroRewardConfig();
+    error NonZeroExitConfig();
+    error InvalidTriggerReserves();
+    error InvalidTokenIndices();
+    error InvalidExitTriggers();
+
+    event PositionSettingsSet(PositionKey key, PositionSettings settings);
+    event ConnectionRegistrySet(address connectorRegistry);
+
     function getPositionSettings(
         PositionKey calldata key
     ) external view returns (PositionSettings memory);

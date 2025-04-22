@@ -9,25 +9,15 @@ import { SwapParams } from "contracts/interfaces/INftLiquidityConnector.sol";
 import { INonfungiblePositionManager } from
     "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 import { IMasterchefV3 } from "contracts/interfaces/external/IMasterchefV3.sol";
-import { UniswapV3Connector } from "contracts/connectors/UniswapV3Connector.sol";
+import {
+    UniswapV3Connector,
+    NftPoolInfo
+} from "contracts/connectors/UniswapV3Connector.sol";
+import { IPancakeV3Pool } from
+    "contracts/interfaces/external/pancake/IPancakeV3Pool.sol";
 
 contract MasterchefV3Connector is UniswapV3Connector {
     error Unsupported();
-
-    function depositNewNft(
-        Farm calldata farm,
-        INonfungiblePositionManager nft,
-        uint256 tokenIndex,
-        bytes calldata // extraData
-    ) external payable override {
-        uint256 tokenId = IERC721Enumerable(nft).tokenOfOwnerByIndex(
-            address(this), tokenIndex
-        );
-
-        IERC721Enumerable(nft).safeTransferFrom(
-            address(this), farm.stakingContract, tokenId
-        );
-    }
 
     function depositExistingNft(
         NftPosition calldata position,
@@ -69,6 +59,24 @@ contract MasterchefV3Connector is UniswapV3Connector {
                 params
             );
         }
+    }
+
+    function poolInfo(
+        address pool,
+        bytes32 // poolId
+    ) external view virtual override returns (NftPoolInfo memory) {
+        (uint160 sqrtPriceX96, int24 tick,,,,,) = IPancakeV3Pool(pool).slot0();
+        return NftPoolInfo({
+            token0: IPancakeV3Pool(pool).token0(),
+            token1: IPancakeV3Pool(pool).token1(),
+            fee: IPancakeV3Pool(pool).fee(),
+            tickSpacing: uint24(IPancakeV3Pool(pool).tickSpacing()),
+            sqrtPriceX96: sqrtPriceX96,
+            tick: tick,
+            liquidity: IPancakeV3Pool(pool).liquidity(),
+            feeGrowthGlobal0X128: IPancakeV3Pool(pool).feeGrowthGlobal0X128(),
+            feeGrowthGlobal1X128: IPancakeV3Pool(pool).feeGrowthGlobal1X128()
+        });
     }
 
     function swapExactTokensForTokens(

@@ -10,6 +10,8 @@ import { ILiquidityConnector } from
 import { ISwapLib } from "contracts/interfaces/libraries/ISwapLib.sol";
 import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
 
+address constant UNISWAP_ETH = 0x0000000000000000000000000000000000000000;
+
 contract SwapLib is DelegateModule, ISwapLib {
     error SwapAmountZero();
 
@@ -29,7 +31,7 @@ contract SwapLib is DelegateModule, ISwapLib {
 
     function swapMultiple(
         SwapParams[] memory swapParams
-    ) external {
+    ) external payable {
         uint256 swapDataLength = swapParams.length;
         for (uint256 i; i < swapDataLength;) {
             _swap(swapParams[i]);
@@ -46,20 +48,25 @@ contract SwapLib is DelegateModule, ISwapLib {
     ) internal {
         address tokenIn = swapParams.tokenIn;
 
+        bool isNative = tokenIn == UNISWAP_ETH;
+
         if (swapParams.amountIn == 0) {
-            swapParams.amountIn = IERC20(tokenIn).balanceOf(address(this));
+            swapParams.amountIn = isNative
+                ? address(this).balance
+                : IERC20(tokenIn).balanceOf(address(this));
         }
 
         if (swapParams.amountIn == 0) {
             revert SwapAmountZero();
         }
 
-        // In case there is USDT dust approval, revoke it
-        SafeTransferLib.safeApprove(tokenIn, swapParams.router, 0);
-
-        SafeTransferLib.safeApprove(
-            tokenIn, swapParams.router, swapParams.amountIn
-        );
+        if (!isNative) {
+            // In case there is USDT dust approval, revoke it
+            SafeTransferLib.safeApprove(tokenIn, swapParams.router, 0);
+            SafeTransferLib.safeApprove(
+                tokenIn, swapParams.router, swapParams.amountIn
+            );
+        }
 
         address connectorAddress =
             connectorRegistry.connectorOf(swapParams.router);
@@ -72,7 +79,10 @@ contract SwapLib is DelegateModule, ISwapLib {
             abi.encodeCall(routerConnector.swapExactTokensForTokens, swapParams)
         );
 
-        // Revoke any approval after swap in case the swap amount was estimated
-        SafeTransferLib.safeApprove(tokenIn, swapParams.router, 0);
+        if (!isNative) {
+            // Revoke any approval after swap in case the swap amount was
+            // estimated
+            SafeTransferLib.safeApprove(tokenIn, swapParams.router, 0);
+        }
     }
 }

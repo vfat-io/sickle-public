@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { IPool } from "contracts/interfaces/external/aerodrome/IPool.sol";
-
 import { Sickle } from "contracts/Sickle.sol";
 
 struct PositionKey {
@@ -23,12 +21,14 @@ struct RewardConfig {
 }
 
 struct ExitConfig {
-    uint256 triggerPriceHigh;
+    uint256 baseTokenIndex;
+    uint256 quoteTokenIndex;
     uint256 triggerPriceLow;
-    uint256 triggerReserves0;
-    uint256 triggerReserves1;
     address exitTokenOutLow;
+    uint256 triggerPriceHigh;
     address exitTokenOutHigh;
+    uint256[] triggerReservesLow;
+    address[] triggerReservesTokensOut;
     uint256 priceImpactBP;
     uint256 slippageBP;
 }
@@ -36,7 +36,7 @@ struct ExitConfig {
 /**
  * Settings for automating an ERC20 position
  * @param pool: Uniswap or Aerodrome vAMM/sAMM pair for the position (requires
- * token0/token1/getReserves functions)
+ * ILiquidityConnector connector registered)
  * @param router: Router for the pair (requires connector registration)
  * @param automateRewards: Whether to automatically harvest or compound rewards
  * for this position, regardless of rebalance settings.
@@ -49,10 +49,11 @@ struct ExitConfig {
  * @param exitConfig: Configuration for the above
  */
 struct PositionSettings {
-    IPool pair;
+    address pool;
     address router;
     bool automateRewards;
     RewardConfig rewardConfig;
     bool autoExit;
     ExitConfig exitConfig;
+    bytes extraData;
 }

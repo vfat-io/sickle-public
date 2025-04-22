@@ -7,13 +7,6 @@ import { Farm } from "contracts/structs/FarmStrategyStructs.sol";
 import { NftPosition } from "contracts/structs/NftFarmStrategyStructs.sol";
 
 interface INftFarmConnector {
-    function depositNewNft(
-        Farm calldata farm,
-        INonfungiblePositionManager nft,
-        uint256 tokenIndex, // uses tokenOfOWnerByIndex to make the deposit
-        bytes calldata extraData
-    ) external payable;
-
     function depositExistingNft(
         NftPosition calldata position,
         bytes calldata extraData
@@ -32,4 +25,14 @@ interface INftFarmConnector {
         uint128 maxAmount1,
         bytes calldata extraData
     ) external payable;
+
+    function earned(
+        NftPosition calldata position,
+        address[] memory rewardTokens
+    ) external view returns (uint256[] memory);
+
+    function isStaked(
+        address user,
+        NftPosition calldata position
+    ) external view returns (bool);
 }

@@ -32,4 +32,25 @@ contract MasterchefConnector is IFarmConnector {
     ) external override {
         IMasterchef(farm.stakingContract).deposit(farm.poolIndex, 0);
     }
+
+    function balanceOf(
+        Farm calldata farm,
+        address user
+    ) external view virtual override returns (uint256) {
+        (uint256 amount,) =
+            IMasterchef(farm.stakingContract).userInfo(farm.poolIndex, user);
+        return amount;
+    }
+
+    function earned(
+        Farm calldata farm,
+        address user,
+        address[] calldata
+    ) external view virtual override returns (uint256[] memory) {
+        uint256[] memory rewards = new uint256[](1);
+        (, uint256 pendingRewards) =
+            IMasterchef(farm.stakingContract).userInfo(farm.poolIndex, user);
+        rewards[0] = pendingRewards;
+        return rewards;
+    }
 }

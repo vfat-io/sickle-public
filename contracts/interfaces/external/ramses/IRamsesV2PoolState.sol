@@ -9,10 +9,9 @@ interface IRamsesV2PoolState {
     /// @notice reads arbitrary storage slots and returns the bytes
     /// @param slots The slots to read from
     /// @return returnData The data read from the slots
-    function readStorage(bytes32[] calldata slots)
-        external
-        view
-        returns (bytes32[] memory returnData);
+    function readStorage(
+        bytes32[] calldata slots
+    ) external view returns (bytes32[] memory returnData);
 
     /// @notice The 0th storage slot in the pool stores many values, and is
     /// exposed as a single method to save gas
@@ -58,7 +57,9 @@ interface IRamsesV2PoolState {
     ///  endSecondsPerLiquidityPeriodX128 Seconds per liquidity at period's end
     ///  endSecondsPerBoostedLiquidityPeriodX128 Seconds per boosted liquidity
     /// at period's end
-    function periods(uint256 period)
+    function periods(
+        uint256 period
+    )
         external
         view
         returns (
@@ -146,7 +147,9 @@ interface IRamsesV2PoolState {
     /// In addition, these values are only relative and must be used only in
     /// comparison to previous snapshots for
     /// a specific position.
-    function ticks(int24 tick)
+    function ticks(
+        int24 tick
+    )
         external
         view
         returns (
@@ -164,7 +167,9 @@ interface IRamsesV2PoolState {
 
     /// @notice Returns 256 packed tick initialized boolean values. See
     /// TickBitmap for more information
-    function tickBitmap(int16 wordPosition) external view returns (uint256);
+    function tickBitmap(
+        int16 wordPosition
+    ) external view returns (uint256);
 
     /// @notice Returns the information about a position by the position's key
     /// @param key The position's key is a hash of a preimage composed by the
@@ -179,7 +184,9 @@ interface IRamsesV2PoolState {
     /// Returns tokensOwed1 the computed amount of token1 owed to the position
     /// as of the last mint/burn/poke
     /// Returns attachedVeRamId the veRam tokenId attached to the position
-    function positions(bytes32 key)
+    function positions(
+        bytes32 key
+    )
         external
         view
         returns (
@@ -196,7 +203,9 @@ interface IRamsesV2PoolState {
     /// @return totalBoostAmount The total amount of boost this period has,
     /// Returns totalVeRamAmount The total amount of veRam attached to this
     /// period
-    function boostInfos(uint256 period)
+    function boostInfos(
+        uint256 period
+    )
         external
         view
         returns (uint128 totalBoostAmount, int128 totalVeRamAmount);
@@ -256,7 +265,9 @@ interface IRamsesV2PoolState {
     /// liquidity for the life of the pool as of the observation timestamp,
     /// Returns initialized whether the observation has been initialized and the
     /// values are safe to use
-    function observations(uint256 index)
+    function observations(
+        uint256 index
+    )
         external
         view
         returns (

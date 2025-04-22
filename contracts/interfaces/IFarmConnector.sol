@@ -17,4 +17,15 @@ interface IFarmConnector {
     ) external;
 
     function claim(Farm calldata farm, bytes memory extraData) external;
+
+    function balanceOf(
+        Farm calldata farm,
+        address user
+    ) external view returns (uint256);
+
+    function earned(
+        Farm calldata farm,
+        address user,
+        address[] calldata rewardTokens
+    ) external view returns (uint256[] memory);
 }

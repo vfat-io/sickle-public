@@ -10,6 +10,11 @@ import { INonfungiblePositionManager } from
     "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 
 import { Sickle } from "contracts/Sickle.sol";
+import {
+    INftLiquidityConnector,
+    NftPositionInfo,
+    NftPoolInfo
+} from "contracts/interfaces/INftLiquidityConnector.sol";
 import { INftSettingsRegistry } from
     "contracts/interfaces/INftSettingsRegistry.sol";
 import {
@@ -23,63 +28,26 @@ import {
     RebalanceConfig
 } from "contracts/structs/NftSettingsStructs.sol";
 import { SickleFactory } from "contracts/SickleFactory.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { TimelockAdmin } from "contracts/base/TimelockAdmin.sol";
 
-interface IPreviousAutomation {
-    function rewardAutomation(
-        address user
-    ) external returns (RewardBehavior);
-    function harvestTokensOut(
-        address user
-    ) external returns (address);
+struct PreviousNftSettings {
+    IUniswapV3Pool pool;
+    bool autoRebalance;
+    RebalanceConfig rebalanceConfig;
+    bool automateRewards;
+    RewardConfig rewardConfig;
+    bool autoExit;
+    ExitConfig exitConfig;
 }
 
 interface IPreviousNftSettingsRegistry {
-    struct PreviousRebalanceConfig {
-        int24 bufferTicksBelow;
-        int24 bufferTicksAbove;
-        uint256 slippageBP;
-        int24 cutoffTickLow;
-        int24 cutoffTickHigh;
-        uint8 delayMin;
-    }
-
-    struct PreviousNftSettings {
-        bool autoRebalance;
-        RewardBehavior rewardBehavior;
-        address harvestTokenOut;
-        PreviousRebalanceConfig rebalanceConfig;
-    }
-
     function getNftSettings(
         NftKey memory key
-    ) external returns (PreviousNftSettings memory);
+    ) external view returns (PreviousNftSettings memory);
 }
 
-contract NftSettingsRegistry is INftSettingsRegistry {
-    error AutoHarvestNotSet();
-    error AutoCompoundNotSet();
-    error AutoRebalanceNotSet();
-    error AutoExitNotSet();
-    error CompoundOrHarvestNotSet();
-    error CompoundAndHarvestBothSet();
-    error ExitTriggersNotSet();
-    error InvalidTokenOut();
-    error InvalidMinMaxTickRange();
-    error InvalidSlippageBP();
-    error InvalidPriceImpactBP();
-    error InvalidDustBP();
-    error InvalidMinTickLow();
-    error InvalidMaxTickHigh();
-    error OnlySickle();
-    error RebalanceConfigNotSet();
-    error TickWithinRange();
-    error TickOutsideStopLossRange();
-    error SickleNotDeployed();
-    error InvalidWidth(uint24 actual, uint24 expected);
-
-    event NftSettingsSet(NftKey key, NftSettings settings);
-    event NftSettingsUnset(NftKey key);
-
+contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
     uint256 constant MAX_SLIPPAGE_BP = 500;
     uint256 constant MAX_PRICE_IMPACT_BP = 5000;
     uint256 constant MAX_DUST_BP = 5000;
@@ -87,14 +55,28 @@ contract NftSettingsRegistry is INftSettingsRegistry {
     int24 constant MIN_TICK = -MAX_TICK;
 
     SickleFactory public immutable factory;
+    ConnectorRegistry private _connectorRegistry;
 
     constructor(
-        SickleFactory _factory
-    ) {
+        SickleFactory _factory,
+        ConnectorRegistry connectorRegistry,
+        address timelockAdmin
+    ) TimelockAdmin(timelockAdmin) {
         factory = _factory;
+        _connectorRegistry = connectorRegistry;
+        emit ConnectionRegistrySet(address(connectorRegistry));
     }
 
     mapping(bytes32 => NftSettings) settingsMap;
+
+    /*  Timelock functions */
+
+    function setConnectorRegistry(
+        ConnectorRegistry connectorRegistry
+    ) external onlyTimelockAdmin {
+        _connectorRegistry = connectorRegistry;
+        emit ConnectionRegistrySet(address(connectorRegistry));
+    }
 
     /* Public functions */
 
@@ -131,7 +113,7 @@ contract NftSettingsRegistry is INftSettingsRegistry {
     // Validate that a rebalanceFor meets the user requirements
     function validateRebalanceFor(
         NftKey memory key
-    ) public {
+    ) public view {
         NftSettings memory settings = getNftSettings(key);
         RebalanceConfig memory config = settings.rebalanceConfig;
 
@@ -142,25 +124,33 @@ contract NftSettingsRegistry is INftSettingsRegistry {
             revert RebalanceConfigNotSet();
         }
 
-        (,,,,, int24 tickLower, int24 tickUpper,,,,,) =
-            key.nftManager.positions(key.tokenId);
-
-        int24 tick = _get_current_tick(settings.pool);
+        INftLiquidityConnector connector = INftLiquidityConnector(
+            _connectorRegistry.connectorOf(address(key.nftManager))
+        );
+        NftPositionInfo memory positionInfo =
+            connector.positionInfo(address(key.nftManager), key.tokenId);
+        NftPoolInfo memory poolInfo =
+            connector.poolInfo(address(settings.pool), settings.poolId);
 
         if (
-            tick >= tickLower - int24(config.bufferTicksBelow)
-                && tick < tickUpper + int24(config.bufferTicksAbove)
+            poolInfo.tick
+                >= positionInfo.tickLower - int24(config.bufferTicksBelow)
+                && poolInfo.tick
+                    < positionInfo.tickUpper + int24(config.bufferTicksAbove)
         ) {
             revert TickWithinRange();
         }
-        if (tick <= config.cutoffTickLow || tick >= config.cutoffTickHigh) {
+        if (
+            poolInfo.tick <= config.cutoffTickLow
+                || poolInfo.tick >= config.cutoffTickHigh
+        ) {
             revert TickOutsideStopLossRange();
         }
     }
 
     function validateExitFor(
         NftKey memory key
-    ) public {
+    ) public view {
         NftSettings memory settings = getNftSettings(key);
         ExitConfig memory config = settings.exitConfig;
 
@@ -168,9 +158,16 @@ contract NftSettingsRegistry is INftSettingsRegistry {
             revert AutoExitNotSet();
         }
 
-        int24 tick = _get_current_tick(settings.pool);
+        INftLiquidityConnector connector = INftLiquidityConnector(
+            _connectorRegistry.connectorOf(address(key.nftManager))
+        );
+        NftPoolInfo memory poolInfo =
+            connector.poolInfo(address(settings.pool), settings.poolId);
 
-        if (tick >= config.triggerTickLow && tick < config.triggerTickHigh) {
+        if (
+            poolInfo.tick >= config.triggerTickLow
+                && poolInfo.tick < config.triggerTickHigh
+        ) {
             revert TickWithinRange();
         }
     }
@@ -182,21 +179,55 @@ contract NftSettingsRegistry is INftSettingsRegistry {
         uint256 tokenId,
         NftSettings calldata settings
     ) external {
-        Sickle sickle = _get_sickle_by_owner(msg.sender);
-        NftKey memory key = NftKey(sickle, nftManager, tokenId);
-        _set_nft_settings(key, settings);
+        Sickle sickle = _getSickleByOwner(msg.sender);
+        NftKey memory key =
+            NftKey({ sickle: sickle, nftManager: nftManager, tokenId: tokenId });
+        _setNftSettings(key, settings);
     }
 
     function unsetNftSettings(
         INonfungiblePositionManager nftManager,
         uint256 tokenId
     ) external {
-        Sickle sickle = _get_sickle_by_owner(msg.sender);
-        NftKey memory key = NftKey(sickle, nftManager, tokenId);
-        _unset_nft_settings(key);
+        Sickle sickle = _getSickleByOwner(msg.sender);
+        NftKey memory key =
+            NftKey({ sickle: sickle, nftManager: nftManager, tokenId: tokenId });
+        _unsetNftSettings(key);
     }
 
-    /* Sickle (delegatecall) functions */
+    function migrateNftSettings(
+        IPreviousNftSettingsRegistry previousNftSettingsRegistry,
+        INonfungiblePositionManager nftManager,
+        uint256[] memory tokenIds
+    ) external {
+        Sickle sickle = _getSickleByOwner(msg.sender);
+
+        uint256 tokenLength = tokenIds.length;
+        for (uint256 i; i < tokenLength; i++) {
+            NftKey memory key = NftKey({
+                sickle: sickle,
+                nftManager: nftManager,
+                tokenId: tokenIds[i]
+            });
+            PreviousNftSettings memory previousSettings =
+                previousNftSettingsRegistry.getNftSettings(key);
+            NftSettings memory settings = NftSettings({
+                pool: previousSettings.pool,
+                poolId: bytes32(0), // Uniswap V4 only, not used by previous NFT
+                    // settings
+                autoRebalance: previousSettings.autoRebalance,
+                rebalanceConfig: previousSettings.rebalanceConfig,
+                automateRewards: previousSettings.automateRewards,
+                rewardConfig: previousSettings.rewardConfig,
+                autoExit: previousSettings.autoExit,
+                exitConfig: previousSettings.exitConfig,
+                extraData: ""
+            });
+            _setNftSettings(key, settings);
+        }
+    }
+
+    /* Sickle functions */
 
     function setNftSettings(
         NftKey calldata key,
@@ -208,51 +239,49 @@ contract NftSettingsRegistry is INftSettingsRegistry {
             revert OnlySickle();
         }
 
-        _set_nft_settings(key, settings);
+        _setNftSettings(key, settings);
     }
 
-    function resetNftSettings(
+    /// Transfer NFT settings from the old NFT to the new one during a
+    /// rebalance.
+    function transferNftSettings(
         NftKey calldata oldKey,
-        NftKey calldata newKey,
         NftSettings calldata settings
     ) external {
         Sickle sickle = Sickle(payable(msg.sender));
 
-        if (oldKey.sickle != sickle || newKey.sickle != sickle) {
+        if (oldKey.sickle != sickle) {
             revert OnlySickle();
         }
 
-        _unset_nft_settings(oldKey);
+        INftLiquidityConnector connector = INftLiquidityConnector(
+            _connectorRegistry.connectorOf(address(oldKey.nftManager))
+        );
+        uint256 newTokenId =
+            connector.getTokenId(address(oldKey.nftManager), msg.sender);
+        NftKey memory newKey = NftKey({
+            sickle: sickle,
+            nftManager: oldKey.nftManager,
+            tokenId: newTokenId
+        });
 
-        _set_nft_settings(newKey, settings);
-    }
-
-    function migrateNftSettings(
-        IPreviousAutomation automation,
-        IPreviousNftSettingsRegistry previousNftSettingsRegistry,
-        INonfungiblePositionManager nftManager,
-        IUniswapV3Pool[] memory pools,
-        uint256[] memory tokenIds
-    ) external {
-        Sickle sickle = _get_sickle_by_owner(msg.sender);
-
-        uint256 tokenLength = tokenIds.length;
-        for (uint256 i; i < tokenLength; i++) {
-            NftKey memory key = NftKey(sickle, nftManager, tokenIds[i]);
-            RebalanceConfig memory newConfig =
-                _get_new_rebalance_config(previousNftSettingsRegistry, key);
-            NftSettings memory settings =
-                _get_new_nft_settings(automation, sickle, pools[i], newConfig);
-            _set_nft_settings(key, settings);
+        if (newTokenId == oldKey.tokenId) {
+            revert TokenIdUnchanged();
         }
+
+        _unsetNftSettings(oldKey);
+        _setNftSettings(newKey, settings);
     }
 
     /* Modifiers */
 
     modifier checkConfigValues(NftKey memory key, NftSettings memory settings) {
+        if (address(key.nftManager) == address(0)) {
+            revert InvalidNftManager();
+        }
         if (settings.autoRebalance) {
-            _check_rebalance_config(settings.rebalanceConfig);
-            _check_tick_width(key, settings);
+            _checkRebalanceConfig(settings.rebalanceConfig);
+            _checkTickWidth(key, settings);
         } else {
             if (
                 settings.rebalanceConfig.cutoffTickLow != 0
@@ -267,7 +296,9 @@ contract NftSettingsRegistry is INftSettingsRegistry {
         ) {
             revert InvalidTokenOut();
         }
-        if (!settings.autoExit) {
+        if (settings.autoExit) {
+            _checkExitConfig(settings.exitConfig);
+        } else {
             if (
                 settings.exitConfig.triggerTickLow != 0
                     || settings.exitConfig.triggerTickHigh != 0
@@ -278,39 +309,23 @@ contract NftSettingsRegistry is INftSettingsRegistry {
             ) {
                 revert AutoExitNotSet();
             }
-        } else {
-            if (
-                settings.exitConfig.triggerTickLow == 0
-                    && settings.exitConfig.triggerTickHigh == 0
-            ) {
-                revert ExitTriggersNotSet();
-            }
-            if (settings.exitConfig.slippageBP > MAX_SLIPPAGE_BP) {
-                revert InvalidSlippageBP();
-            }
-            if (
-                settings.exitConfig.priceImpactBP > MAX_PRICE_IMPACT_BP
-                    || settings.exitConfig.priceImpactBP == 0
-            ) {
-                revert InvalidPriceImpactBP();
-            }
         }
         _;
     }
 
     /* Internal */
 
-    function _get_sickle_by_owner(
+    function _getSickleByOwner(
         address owner
     ) internal view returns (Sickle) {
-        Sickle sickle = Sickle(payable(factory.sickles(owner)));
-        if (address(sickle) == address(0)) {
+        address sickle = factory.sickles(owner);
+        if (sickle == address(0)) {
             revert SickleNotDeployed();
         }
-        return sickle;
+        return Sickle(payable(sickle));
     }
 
-    function _set_nft_settings(
+    function _setNftSettings(
         NftKey memory key,
         NftSettings memory settings
     ) internal checkConfigValues(key, settings) {
@@ -318,31 +333,15 @@ contract NftSettingsRegistry is INftSettingsRegistry {
         emit NftSettingsSet(key, settings);
     }
 
-    function _unset_nft_settings(
+    function _unsetNftSettings(
         NftKey memory key
     ) internal {
         delete settingsMap[keccak256(abi.encode(key))];
         emit NftSettingsUnset(key);
     }
 
-    // Tick is the 2nd field in slot0, the rest can vary
-    function _get_current_tick(
-        IUniswapV3Pool pool
-    ) internal returns (int24) {
-        (, bytes memory result) =
-            address(pool).call(abi.encodeCall(IUniswapV3PoolState.slot0, ()));
-
-        int24 tick;
-
-        assembly {
-            tick := mload(add(result, 64))
-        }
-
-        return tick;
-    }
-
-    // Check configuratgion parameters for errors
-    function _check_rebalance_config(
+    // Check configuration parameters for errors
+    function _checkRebalanceConfig(
         RebalanceConfig memory config
     ) internal pure {
         if (config.cutoffTickLow < MIN_TICK) {
@@ -353,6 +352,18 @@ contract NftSettingsRegistry is INftSettingsRegistry {
         }
         if (config.cutoffTickHigh > MAX_TICK) {
             revert InvalidMaxTickHigh();
+        }
+        if (
+            config.bufferTicksAbove > 2 * MAX_TICK
+                || config.bufferTicksAbove < 2 * MIN_TICK
+        ) {
+            revert InvalidBufferTicksAbove();
+        }
+        if (
+            config.bufferTicksBelow > 2 * MAX_TICK
+                || config.bufferTicksBelow < 2 * MIN_TICK
+        ) {
+            revert InvalidBufferTicksBelow();
         }
         if (config.slippageBP > MAX_SLIPPAGE_BP) {
             revert InvalidSlippageBP();
@@ -374,82 +385,50 @@ contract NftSettingsRegistry is INftSettingsRegistry {
         }
     }
 
-    function _check_tick_width(
+    function _checkExitConfig(
+        ExitConfig memory config
+    ) internal pure {
+        if (config.triggerTickLow == 0 && config.triggerTickHigh == 0) {
+            revert ExitTriggersNotSet();
+        }
+        if (
+            config.triggerTickLow >= config.triggerTickHigh
+                || config.triggerTickLow < MIN_TICK
+                || config.triggerTickHigh > MAX_TICK
+        ) {
+            revert InvalidExitTriggers();
+        }
+        if (config.slippageBP > MAX_SLIPPAGE_BP) {
+            revert InvalidSlippageBP();
+        }
+        if (
+            config.priceImpactBP > MAX_PRICE_IMPACT_BP
+                || config.priceImpactBP == 0
+        ) {
+            revert InvalidPriceImpactBP();
+        }
+    }
+
+    function _checkTickWidth(
         NftKey memory key,
         NftSettings memory settings
     ) internal view {
-        (,,,,, int24 tickLower, int24 tickUpper,,,,,) =
-            key.nftManager.positions(key.tokenId);
-        int24 tickSpacing = settings.pool.tickSpacing();
+        INftLiquidityConnector connector = INftLiquidityConnector(
+            _connectorRegistry.connectorOf(address(key.nftManager))
+        );
+        NftPositionInfo memory positionInfo =
+            connector.positionInfo(address(key.nftManager), key.tokenId);
+        NftPoolInfo memory poolInfo =
+            connector.poolInfo(address(settings.pool), settings.poolId);
 
-        uint24 actualWidth = uint24(tickUpper - tickLower) / uint24(tickSpacing);
+        uint24 actualWidth = uint24(
+            positionInfo.tickUpper - positionInfo.tickLower
+        ) / poolInfo.tickSpacing;
         uint24 expectedWidth = settings.rebalanceConfig.tickSpacesBelow
             + settings.rebalanceConfig.tickSpacesAbove + 1;
 
         if (actualWidth != expectedWidth) {
             revert InvalidWidth(actualWidth, expectedWidth);
         }
-    }
-
-    /* Migration internals */
-
-    function _get_position_tick_spaces_each_side(
-        NftKey memory key
-    ) private view returns (uint24 below, uint24 above) {
-        (,,,, uint24 tickSpacing, int24 tickLower, int24 tickUpper,,,,,) =
-            key.nftManager.positions(key.tokenId);
-        uint24 totalSpaces = uint24(tickUpper - tickLower) / tickSpacing - 1;
-        below = totalSpaces / 2;
-        above = totalSpaces / 2 + totalSpaces % 2;
-    }
-
-    function _get_new_nft_settings(
-        IPreviousAutomation automation,
-        Sickle sickle,
-        IUniswapV3Pool pool,
-        RebalanceConfig memory newConfig
-    ) internal returns (NftSettings memory) {
-        address sickleOwner = sickle.owner();
-        RewardBehavior rewardBehavior = automation.rewardAutomation(sickleOwner);
-
-        return NftSettings({
-            pool: pool,
-            autoRebalance: true,
-            rebalanceConfig: newConfig,
-            automateRewards: rewardBehavior != RewardBehavior.None,
-            rewardConfig: RewardConfig(
-                rewardBehavior, automation.harvestTokensOut(sickleOwner)
-            ),
-            autoExit: false,
-            exitConfig: ExitConfig(0, 0, address(0), address(0), 0, 0)
-        });
-    }
-
-    function _get_new_rebalance_config(
-        IPreviousNftSettingsRegistry previousNftSettingsRegistry,
-        NftKey memory key
-    ) internal returns (RebalanceConfig memory) {
-        IPreviousNftSettingsRegistry.PreviousNftSettings memory previousSettings =
-            previousNftSettingsRegistry.getNftSettings(key);
-        IPreviousNftSettingsRegistry.PreviousRebalanceConfig memory oldConfig =
-            previousSettings.rebalanceConfig;
-        (uint24 spacesBelow, uint24 spacesAbove) =
-            _get_position_tick_spaces_each_side(key);
-        return RebalanceConfig(
-            spacesBelow,
-            spacesAbove,
-            int24(oldConfig.bufferTicksBelow),
-            int24(oldConfig.bufferTicksAbove),
-            oldConfig.slippageBP,
-            oldConfig.slippageBP,
-            oldConfig.slippageBP,
-            oldConfig.cutoffTickLow,
-            oldConfig.cutoffTickHigh,
-            oldConfig.delayMin,
-            RewardConfig(
-                previousSettings.rewardBehavior,
-                previousSettings.harvestTokenOut
-            )
-        );
     }
 }

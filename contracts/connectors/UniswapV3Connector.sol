@@ -2,31 +2,39 @@
 pragma solidity ^0.8.0;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721Enumerable } from
+    "@openzeppelin/contracts/interfaces/IERC721Enumerable.sol";
 import { INonfungiblePositionManager } from
     "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 import { ISwapRouter } from
     "contracts/interfaces/external/uniswap/ISwapRouter.sol";
+import {
+    IUniswapV3Pool,
+    IUniswapV3PoolState
+} from "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
+import { IUniswapV3Factory } from
+    "contracts/interfaces/external/uniswap/IUniswapV3Factory.sol";
 
 import { INftFarmConnector } from "contracts/interfaces/INftFarmConnector.sol";
-import { INftLiquidityConnector } from
-    "contracts/interfaces/INftLiquidityConnector.sol";
+import {
+    INftLiquidityConnector,
+    NftPositionInfo,
+    NftPoolInfo,
+    NftPoolKey
+} from "contracts/interfaces/INftLiquidityConnector.sol";
 import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
 import {
     NftAddLiquidity,
     NftRemoveLiquidity,
     Pool
 } from "contracts/structs/NftLiquidityStructs.sol";
-import { Farm } from "contracts/structs/FarmStrategyStructs.sol";
 import { NftPosition } from "contracts/structs/NftFarmStrategyStructs.sol";
 
 struct UniswapV3SwapExtraData {
-    address pool;
     bytes path;
 }
 
 contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
-    constructor() { }
-
     error InvalidParameters();
 
     function addLiquidity(
@@ -35,18 +43,21 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
         if (addLiquidityParams.tokenId == 0) {
             _mint(addLiquidityParams);
         } else {
-            _increase_liquidity(addLiquidityParams);
+            _increaseLiquidity(addLiquidityParams);
         }
     }
 
     function removeLiquidity(
         NftRemoveLiquidity memory removeLiquidityParams
     ) external override {
+        NftPositionInfo memory position;
         uint128 currentLiquidity;
         if (removeLiquidityParams.liquidity == type(uint128).max) {
-            (,,,,,,, currentLiquidity,,,,) = removeLiquidityParams.nft.positions(
+            position = positionInfo(
+                address(removeLiquidityParams.nft),
                 removeLiquidityParams.tokenId
             );
+            currentLiquidity = position.liquidity;
             removeLiquidityParams.liquidity = currentLiquidity;
         }
 
@@ -54,12 +65,19 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
             revert InvalidParameters();
         }
 
-        _decrease_liquidity(removeLiquidityParams);
+        _decreaseLiquidity(removeLiquidityParams);
 
-        _collect(removeLiquidityParams);
+        _collect(
+            removeLiquidityParams.nft,
+            removeLiquidityParams.tokenId,
+            removeLiquidityParams.amount0Max,
+            removeLiquidityParams.amount1Max
+        );
 
-        (,,,,,,, currentLiquidity,,,,) =
-            removeLiquidityParams.nft.positions(removeLiquidityParams.tokenId);
+        position = positionInfo(
+            address(removeLiquidityParams.nft), removeLiquidityParams.tokenId
+        );
+        currentLiquidity = position.liquidity;
         if (currentLiquidity == 0) {
             removeLiquidityParams.nft.burn(removeLiquidityParams.tokenId);
         }
@@ -71,25 +89,16 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
         UniswapV3SwapExtraData memory extraData =
             abi.decode(swap.extraData, (UniswapV3SwapExtraData));
 
-        IERC20(swap.tokenIn).approve(address(extraData.pool), swap.amountIn);
-
         ISwapRouter(swap.router).exactInput(
             ISwapRouter.ExactInputParams({
                 path: extraData.path,
                 recipient: address(this),
-                deadline: block.timestamp + 1,
+                deadline: block.timestamp,
                 amountIn: swap.amountIn,
                 amountOutMinimum: swap.minAmountOut
             })
         );
     }
-
-    function depositNewNft(
-        Farm calldata pool,
-        INonfungiblePositionManager nft,
-        uint256 tokenIndex,
-        bytes calldata // extraData
-    ) external payable virtual override { }
 
     function depositExistingNft(
         NftPosition calldata, // position,
@@ -108,24 +117,92 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
         uint128 amount1Max,
         bytes calldata // extraData
     ) external payable virtual override {
-        _claim_fees(position, amount0Max, amount1Max);
+        if (amount0Max > 0 || amount1Max > 0) {
+            _collect(position.nft, position.tokenId, amount0Max, amount1Max);
+        }
     }
 
-    function _claim_fees(
-        NftPosition calldata position,
-        uint128 amount0Max,
-        uint128 amount1Max
-    ) internal virtual {
-        if (amount0Max > 0 || amount1Max > 0) {
-            INonfungiblePositionManager.CollectParams memory params =
-            INonfungiblePositionManager.CollectParams({
-                tokenId: position.tokenId,
-                recipient: address(this),
-                amount0Max: amount0Max,
-                amount1Max: amount1Max
-            });
-            INonfungiblePositionManager(address(position.nft)).collect(params);
-        }
+    function poolInfo(
+        address pool,
+        bytes32 // poolId
+    ) external view virtual override returns (NftPoolInfo memory) {
+        (uint160 sqrtPriceX96, int24 tick,,,,,) = IUniswapV3Pool(pool).slot0();
+        return NftPoolInfo({
+            token0: IUniswapV3Pool(pool).token0(),
+            token1: IUniswapV3Pool(pool).token1(),
+            fee: IUniswapV3Pool(pool).fee(),
+            tickSpacing: uint24(IUniswapV3Pool(pool).tickSpacing()),
+            sqrtPriceX96: sqrtPriceX96,
+            tick: tick,
+            liquidity: IUniswapV3Pool(pool).liquidity(),
+            feeGrowthGlobal0X128: IUniswapV3Pool(pool).feeGrowthGlobal0X128(),
+            feeGrowthGlobal1X128: IUniswapV3Pool(pool).feeGrowthGlobal1X128()
+        });
+    }
+
+    function feeGrowthOutside(
+        address pool,
+        bytes32, // poolId
+        int24 tick_
+    )
+        external
+        view
+        virtual
+        override
+        returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
+    {
+        (,, feeGrowthOutside0X128, feeGrowthOutside1X128,,,,) =
+            IUniswapV3Pool(pool).ticks(tick_);
+    }
+
+    function fee(
+        address pool,
+        uint256 // tokenId
+    ) external view virtual override returns (uint24) {
+        return IUniswapV3Pool(pool).fee();
+    }
+
+    function positionInfo(
+        address nftManager,
+        uint256 tokenId
+    ) public view virtual override returns (NftPositionInfo memory) {
+        (,,,,, int24 tickLower, int24 tickUpper, uint128 liquidity,,,,) =
+            INonfungiblePositionManager(nftManager).positions(tokenId);
+        return NftPositionInfo({
+            liquidity: liquidity,
+            tickLower: tickLower,
+            tickUpper: tickUpper
+        });
+    }
+
+    function positionPoolKey(
+        address poolFactory,
+        address nftManager,
+        uint256 tokenId
+    ) external view virtual override returns (NftPoolKey memory) {
+        (,, address token0, address token1, uint24 fee_,,,,,,,) =
+            INonfungiblePositionManager(nftManager).positions(tokenId);
+        return NftPoolKey({
+            poolAddress: IUniswapV3Factory(poolFactory).getPool(
+                token0, token1, fee_
+            ),
+            poolId: bytes32(0) // Uniswap V4 only
+         });
+    }
+
+    function getTokenId(
+        address nft,
+        address owner
+    ) external view virtual returns (uint256) {
+        return IERC721Enumerable(nft).tokenOfOwnerByIndex(
+            address(owner), IERC721Enumerable(nft).balanceOf(address(owner)) - 1
+        );
+    }
+
+    function totalSupply(
+        address nftManager
+    ) external view virtual override returns (uint256) {
+        return INonfungiblePositionManager(nftManager).totalSupply();
     }
 
     function _mint(
@@ -141,14 +218,14 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
                 amount0Desired: addLiquidityParams.amount0Desired,
                 amount1Desired: addLiquidityParams.amount1Desired,
                 amount0Min: addLiquidityParams.amount0Min,
-                amount1Min: addLiquidityParams.amount0Min,
+                amount1Min: addLiquidityParams.amount1Min,
                 recipient: address(this),
-                deadline: block.timestamp + 1
+                deadline: block.timestamp
             })
         );
     }
 
-    function _increase_liquidity(
+    function _increaseLiquidity(
         NftAddLiquidity memory addLiquidityParams
     ) internal {
         addLiquidityParams.nft.increaseLiquidity(
@@ -158,12 +235,12 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
                 amount1Desired: addLiquidityParams.amount1Desired,
                 amount0Min: addLiquidityParams.amount0Min,
                 amount1Min: addLiquidityParams.amount1Min,
-                deadline: block.timestamp + 1
+                deadline: block.timestamp
             })
         );
     }
 
-    function _decrease_liquidity(
+    function _decreaseLiquidity(
         NftRemoveLiquidity memory removeLiquidityParams
     ) internal {
         removeLiquidityParams.nft.decreaseLiquidity(
@@ -172,21 +249,39 @@ contract UniswapV3Connector is INftLiquidityConnector, INftFarmConnector {
                 liquidity: removeLiquidityParams.liquidity,
                 amount0Min: removeLiquidityParams.amount0Min,
                 amount1Min: removeLiquidityParams.amount1Min,
-                deadline: block.timestamp + 1
+                deadline: block.timestamp
             })
         );
     }
 
     function _collect(
-        NftRemoveLiquidity memory removeLiquidityParams
+        INonfungiblePositionManager nft,
+        uint256 tokenId,
+        uint128 amount0Max,
+        uint128 amount1Max
     ) internal {
-        removeLiquidityParams.nft.collect(
+        nft.collect(
             INonfungiblePositionManager.CollectParams({
-                tokenId: removeLiquidityParams.tokenId,
+                tokenId: tokenId,
                 recipient: address(this),
-                amount0Max: removeLiquidityParams.amount0Max,
-                amount1Max: removeLiquidityParams.amount1Max
+                amount0Max: amount0Max,
+                amount1Max: amount1Max
             })
         );
+    }
+
+    function isStaked(
+        address,
+        NftPosition calldata
+    ) external view virtual override returns (bool) {
+        return false; // Uniswap V3 does not support staking
+    }
+
+    function earned(
+        NftPosition calldata,
+        address[] memory rewardTokens
+    ) external view virtual override returns (uint256[] memory) {
+        // Uniswap V3 does not support token incentives
+        return new uint256[](rewardTokens.length);
     }
 }

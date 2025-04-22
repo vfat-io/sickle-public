@@ -10,5 +10,5 @@ interface ISwapLib {
 
     function swapMultiple(
         SwapParams[] memory swaps
-    ) external;
+    ) external payable;
 }

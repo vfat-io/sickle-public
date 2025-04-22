@@ -5,8 +5,7 @@ import {
     ILiquidityConnector,
     AddLiquidityParams,
     RemoveLiquidityParams,
-    SwapParams,
-    GetAmountOutParams
+    SwapParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
 
 struct AggregatorExtraData {
@@ -48,9 +47,23 @@ contract AggregatorConnector is ILiquidityConnector {
         }
     }
 
-    function getAmountOut(
-        GetAmountOutParams memory
+    function getPoolPrice(
+        address, // lpToken
+        uint256, // baseTokenIndex
+        uint256 // quoteTokenIndex
     ) external pure override returns (uint256) {
+        revert NotImplemented();
+    }
+
+    function getReserves(
+        address // lpToken
+    ) external pure override returns (uint256[] memory) {
+        revert NotImplemented();
+    }
+
+    function getTokens(
+        address // lpToken
+    ) external pure override returns (address[] memory) {
         revert NotImplemented();
     }
 }

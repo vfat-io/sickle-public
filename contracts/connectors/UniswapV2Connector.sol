@@ -10,8 +10,7 @@ import {
     ILiquidityConnector,
     AddLiquidityParams,
     RemoveLiquidityParams,
-    SwapParams,
-    GetAmountOutParams
+    SwapParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
 
 struct UniswapV2SwapExtraData {
@@ -63,20 +62,34 @@ contract UniswapV2Connector is ILiquidityConnector {
         );
     }
 
-    function getAmountOut(
-        GetAmountOutParams memory getAmountOutParams
-    ) external view override returns (uint256) {
-        address token0 = IUniswapV2Pair(getAmountOutParams.lpToken).token0();
+    function getPoolPrice(
+        address lpToken,
+        uint256 baseTokenIndex,
+        uint256 // quoteTokenIndex
+    ) external view returns (uint256) {
         (uint256 reserve0, uint256 reserve1,) =
-            IUniswapV2Pair(getAmountOutParams.lpToken).getReserves();
-        if (getAmountOutParams.tokenIn == token0) {
-            return IUniswapV2Router02(getAmountOutParams.router).getAmountOut(
-                getAmountOutParams.amountIn, reserve0, reserve1
-            );
-        } else {
-            return IUniswapV2Router02(getAmountOutParams.router).getAmountOut(
-                getAmountOutParams.amountIn, reserve1, reserve0
-            );
+            IUniswapV2Pair(lpToken).getReserves();
+        if (baseTokenIndex == 1) {
+            return reserve1 * 1e18 / reserve0;
         }
+        return reserve0 * 1e18 / reserve1;
+    }
+
+    function getReserves(
+        address lpToken
+    ) external view returns (uint256[] memory reserves) {
+        (uint256 reserve0, uint256 reserve1,) =
+            IUniswapV2Pair(lpToken).getReserves();
+        reserves = new uint256[](2);
+        reserves[0] = reserve0;
+        reserves[1] = reserve1;
+    }
+
+    function getTokens(
+        address lpToken
+    ) external view returns (address[] memory tokens) {
+        tokens = new address[](2);
+        tokens[0] = IUniswapV2Pair(lpToken).token0();
+        tokens[1] = IUniswapV2Pair(lpToken).token1();
     }
 }

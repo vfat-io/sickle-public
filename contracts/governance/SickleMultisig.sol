@@ -7,6 +7,17 @@ import { EnumerableSet } from
 contract SickleMultisig {
     using EnumerableSet for EnumerableSet.AddressSet;
 
+    // Transaction states enum
+    // Ordering is important here - the first (default) value should be
+    // NotCreated,
+    // the second Created.
+    enum State {
+        NotCreated,
+        Created,
+        Executed,
+        Cancelled
+    }
+
     // Data structures
 
     struct Proposal {
@@ -19,14 +30,13 @@ contract SickleMultisig {
         // Calls to be executed in the transaction
         Proposal proposal;
         // Transaction state
-        bool exists;
-        bool executed;
-        bool cancelled;
+        State state;
         // Settings nonce that the transaction was created with
         uint256 settingsNonce;
         // Signing state
-        uint256 signatures;
-        mapping(address => bool) signed;
+        address[] signers;
+        // Expiration timestamp
+        uint256 expirationTimestamp;
     }
 
     // Errors
@@ -36,14 +46,16 @@ contract SickleMultisig {
 
     error InvalidProposal();
     error InvalidThreshold();
+    error InvalidExpiration();
 
     error TransactionDoesNotExist();
-    error TransactionNotReadyToExecute();
+    error InsufficientSignatures();
     error TransactionNoLongerValid();
     error TransactionAlreadyExists();
     error TransactionAlreadySigned();
     error TransactionAlreadyExecuted();
     error TransactionAlreadyCancelled();
+    error TransactionExpired();
 
     error SignerAlreadyAdded();
     error SignerAlreadyRemoved();
@@ -55,6 +67,7 @@ contract SickleMultisig {
     event SignerRemoved(address signer);
 
     event ThresholdChanged(uint256 newThreshold);
+    event ExpirationChanged(uint32 newExpiration);
 
     event TransactionProposed(uint256 proposalId, address signer);
     event TransactionSigned(uint256 proposalId, address signer);
@@ -66,57 +79,100 @@ contract SickleMultisig {
     uint256 public threshold;
     uint256 public settingsNonce;
     mapping(uint256 => Transaction) public transactions;
+    uint32 public expiration;
+
+    // Private storage
+
+    EnumerableSet.AddressSet private _signers;
 
     // Initialization
 
-    constructor(address initialSigner) {
+    constructor(
+        address initialSigner
+    ) {
         // Initialize with only a single signer and a threshold of 1. The signer
         // can add more signers and update the threshold using a proposal.
         _addSigner(initialSigner);
         _setThreshold(1);
+        _setExpiration(type(uint32).max);
     }
 
     // Signer-only actions
 
     /// @notice Propose a new transaction to be executed from the multisig
     /// @custom:access Restricted to multisig signers.
-    function propose(Proposal memory proposal)
-        public
-        onlySigner
-        returns (uint256)
-    {
+    function propose(
+        Proposal memory proposal
+    ) public onlySigner returns (uint256) {
+        return _propose(proposal);
+    }
+
+    /// @notice Propose a cancellation for a transaction
+    /// @custom:access Restricted to multisig signers.
+    function proposeCancellation(
+        uint256 proposalId
+    ) public onlySigner returns (uint256) {
+        Proposal memory proposal = Proposal({
+            targets: new address[](1),
+            calldatas: new bytes[](1),
+            description: ""
+        });
+
+        proposal.targets[0] = address(this);
+        proposal.calldatas[0] = abi.encodeCall(this.cancel, (proposalId));
+
         return _propose(proposal);
     }
 
     /// @notice Sign a transaction
     /// @custom:access Restricted to multisig signers.
-    function sign(uint256 proposalId) public onlySigner {
+    function sign(
+        uint256 proposalId
+    ) public onlySigner {
         _sign(proposalId);
-    }
-
-    /// @notice Cancel a transaction that hasn't been executed or invalidated
-    /// @custom:access Restricted to multisig signers.
-    function cancel(uint256 proposalId) public onlySigner {
-        _cancel(proposalId);
     }
 
     /// @notice Execute a transaction that has passed the signatures threshold
     /// @custom:access Restricted to multisig signers.
-    function execute(uint256 proposalId) public onlySigner {
+    function execute(
+        uint256 proposalId
+    ) public onlySigner {
+        _execute(proposalId);
+    }
+
+    /// @notice Sign a transaction and immediately execute it
+    /// @dev Assumes only one signature is missing from the signing threshold.
+    /// @custom:access Restricted to multisig signers.
+    function signAndExecute(
+        uint256 proposalId
+    ) public onlySigner {
+        _sign(proposalId);
         _execute(proposalId);
     }
 
     // Multisig-only actions
 
+    /// @notice Cancel a transaction that hasn't been executed or invalidated
+    /// @custom:access Restricted to multisig transactions.
+    function cancel(
+        uint256 proposalId
+    ) public onlyMultisig {
+        _cancel(proposalId);
+    }
+
     /// @notice Add a signer to the multisig
     /// @custom:access Restricted to multisig transactions.
-    function addSigner(address signer) public onlyMultisig {
+    function addSigner(
+        address signer
+    ) public onlyMultisig {
         _addSigner(signer);
     }
 
     /// @notice Remove a signer from the multisig
     /// @custom:access Restricted to multisig transactions.
-    function removeSigner(address signer) public onlyMultisig {
+    function removeSigner(
+        address signer
+    ) public onlyMultisig {
         _removeSigner(signer);
     }
 
@@ -132,8 +188,18 @@ contract SickleMultisig {
 
     /// @notice Set a new signatures threshold for the multisig
     /// @custom:access Restricted to multisig transactions.
-    function setThreshold(uint256 newThreshold) public onlyMultisig {
+    function setThreshold(
+        uint256 newThreshold
+    ) public onlyMultisig {
         _setThreshold(newThreshold);
+    }
+
+    /// @notice Set a new transaction expiration for the multisig
+    /// @custom:access Restricted to multisig transactions.
+    function setExpiration(
+        uint32 newExpiration
+    ) public onlyMultisig {
+        _setExpiration(newExpiration);
     }
 
     // Public functions
@@ -146,15 +212,15 @@ contract SickleMultisig {
         return _signers.values();
     }
 
-    function isSigner(address signer) public view returns (bool) {
+    function isSigner(
+        address signer
+    ) public view returns (bool) {
         return _signers.contains(signer);
     }
 
-    function hashProposal(Proposal memory proposal)
-        public
-        view
-        returns (uint256)
-    {
+    function hashProposal(
+        Proposal memory proposal
+    ) public view returns (uint256) {
         return uint256(
             keccak256(
                 abi.encode(
@@ -167,35 +233,49 @@ contract SickleMultisig {
         );
     }
 
-    function getProposal(uint256 proposalId)
-        public
-        view
-        returns (Proposal memory)
-    {
+    function getProposal(
+        uint256 proposalId
+    ) public view returns (Proposal memory) {
         return transactions[proposalId].proposal;
     }
 
-    function exists(uint256 proposalId) public view returns (bool) {
-        return transactions[proposalId].exists;
+    function exists(
+        uint256 proposalId
+    ) public view returns (bool) {
+        return !_expired(proposalId)
+        // We can use >= since enums are just uint8 with extra steps
+        && transactions[proposalId].state >= State.Created;
     }
 
-    function executed(uint256 proposalId) public view returns (bool) {
-        return transactions[proposalId].executed;
+    function executed(
+        uint256 proposalId
+    ) public view returns (bool) {
+        return transactions[proposalId].state == State.Executed;
     }
 
-    function cancelled(uint256 proposalId) public view returns (bool) {
-        return transactions[proposalId].cancelled;
+    function cancelled(
+        uint256 proposalId
+    ) public view returns (bool) {
+        return transactions[proposalId].state == State.Cancelled;
     }
 
-    function signatures(uint256 proposalId) public view returns (uint256) {
-        return transactions[proposalId].signatures;
+    function expirationTimestamp(
+        uint256 proposalId
+    ) public view returns (uint256) {
+        return transactions[proposalId].expirationTimestamp;
+    }
+
+    function signatures(
+        uint256 proposalId
+    ) public view returns (uint256) {
+        return transactions[proposalId].signers.length;
     }
 
     function signed(
         uint256 proposalId,
         address signer
     ) public view returns (bool) {
-        return transactions[proposalId].signed[signer];
+        return _hasSigned(proposalId, signer);
     }
 
     // Modifiers
@@ -223,25 +303,35 @@ contract SickleMultisig {
 
     // Internals
 
-    EnumerableSet.AddressSet private _signers;
-
-    function _propose(Proposal memory proposal) internal returns (uint256) {
+    function _propose(
+        Proposal memory proposal
+    ) internal returns (uint256) {
         // Check that the proposal is valid
         if (proposal.targets.length != proposal.calldatas.length) {
             revert InvalidProposal();
         }
 
-        // Retrieve transaction details
+        // Hash transaction
         uint256 proposalId = hashProposal(proposal);
+
+        // Expire transaction if needed
+        if (_expired(proposalId)) {
+            delete transactions[proposalId];
+        }
+
+        // Retrieve transaction details
         Transaction storage transaction = transactions[proposalId];
 
         // Validate transaction state
-        if (transaction.exists) revert TransactionAlreadyExists();
+        if (transaction.state >= State.Created) {
+            revert TransactionAlreadyExists();
+        }
 
         // Initialize transaction statue
-        transaction.exists = true;
+        transaction.state = State.Created;
         transaction.proposal = proposal;
         transaction.settingsNonce = settingsNonce;
+        transaction.expirationTimestamp = block.timestamp + expiration;
 
         // Emit event
         emit TransactionProposed(proposalId, msg.sender);
@@ -252,35 +342,58 @@ contract SickleMultisig {
         return proposalId;
     }
 
-    function _validateTransaction(Transaction storage transaction)
-        internal
-        view
-    {
-        if (!transaction.exists) revert TransactionDoesNotExist();
-        if (transaction.executed) revert TransactionAlreadyExecuted();
-        if (transaction.cancelled) revert TransactionAlreadyCancelled();
+    function _expired(
+        Transaction storage transaction
+    ) internal view returns (bool) {
+        return transaction.expirationTimestamp < block.timestamp;
+    }
+
+    function _expired(
+        uint256 proposalId
+    ) internal view returns (bool) {
+        return _expired(transactions[proposalId]);
+    }
+
+    function _validateTransaction(
+        Transaction storage transaction
+    ) internal view {
+        if (transaction.state == State.NotCreated) {
+            revert TransactionDoesNotExist();
+        }
+        if (transaction.state == State.Executed) {
+            revert TransactionAlreadyExecuted();
+        }
+        if (transaction.state == State.Cancelled) {
+            revert TransactionAlreadyCancelled();
+        }
         if (transaction.settingsNonce != settingsNonce) {
             revert TransactionNoLongerValid();
         }
+        if (_expired(transaction)) revert TransactionExpired();
     }
 
-    function _sign(uint256 proposalId) internal {
+    function _sign(
+        uint256 proposalId
+    ) internal {
         // Retrieve transaction details
         Transaction storage transaction = transactions[proposalId];
 
         // Validate transaction state
         _validateTransaction(transaction);
-        if (transaction.signed[msg.sender]) revert TransactionAlreadySigned();
+        if (_hasSigned(proposalId, msg.sender)) {
+            revert TransactionAlreadySigned();
+        }
 
         // Update transaction state
-        transaction.signatures += 1;
-        transaction.signed[msg.sender] = true;
+        transaction.signers.push(msg.sender);
 
         // Emit event
         emit TransactionSigned(proposalId, msg.sender);
     }
 
-    function _cancel(uint256 proposalId) internal {
+    function _cancel(
+        uint256 proposalId
+    ) internal {
         // Retrieve transaction details
         Transaction storage transaction = transactions[proposalId];
 
@@ -288,13 +401,15 @@ contract SickleMultisig {
         _validateTransaction(transaction);
 
         // Update transaction state
-        transaction.cancelled = true;
+        transaction.state = State.Cancelled;
 
         // Emit event
         emit TransactionCancelled(proposalId, msg.sender);
     }
 
-    function _execute(uint256 proposalId) internal {
+    function _execute(
+        uint256 proposalId
+    ) internal {
         // Retrieve transaction details
         Transaction storage transaction = transactions[proposalId];
 
@@ -302,12 +417,12 @@ contract SickleMultisig {
         _validateTransaction(transaction);
 
         // Check if the transaction has enough signatures
-        if (transaction.signatures < threshold) {
-            revert TransactionNotReadyToExecute();
+        if (transaction.signers.length < threshold) {
+            revert InsufficientSignatures();
         }
 
         // Update transaction state
-        transaction.executed = true;
+        transaction.state = State.Executed;
 
         // Execute calls
         uint256 length = transaction.proposal.targets.length;
@@ -336,19 +451,19 @@ contract SickleMultisig {
         }
     }
 
-    function _addSigner(address signer) internal changesSettings {
-        if (isSigner(signer)) revert SignerAlreadyAdded();
-
-        _signers.add(signer);
-
+    function _addSigner(
+        address signer
+    ) internal changesSettings {
+        if (!_signers.add(signer)) revert SignerAlreadyAdded();
         emit SignerAdded(signer);
     }
 
-    function _removeSigner(address signer) internal changesSettings {
-        if (!isSigner(signer)) revert SignerAlreadyRemoved();
+    function _removeSigner(
+        address signer
+    ) internal changesSettings {
         if (signerCount() == 1) revert SignerCannotBeRemoved();
 
-        _signers.remove(signer);
+        if (!_signers.remove(signer)) revert SignerAlreadyRemoved();
 
         emit SignerRemoved(signer);
 
@@ -357,7 +472,9 @@ contract SickleMultisig {
         }
     }
 
-    function _setThreshold(uint256 newThreshold) internal changesSettings {
+    function _setThreshold(
+        uint256 newThreshold
+    ) internal changesSettings {
         if (newThreshold > signerCount() || newThreshold == 0) {
             revert InvalidThreshold();
         }
@@ -365,5 +482,31 @@ contract SickleMultisig {
         threshold = newThreshold;
 
         emit ThresholdChanged(newThreshold);
+    }
+
+    function _setExpiration(
+        uint32 newExpiration
+    ) internal changesSettings {
+        if (newExpiration == 0) revert InvalidExpiration();
+
+        expiration = newExpiration;
+
+        emit ExpirationChanged(newExpiration);
+    }
+
+    function _hasSigned(
+        uint256 proposalId,
+        address signer
+    ) internal view returns (bool) {
+        address[] memory signers = transactions[proposalId].signers;
+
+        for (uint256 i; i < signers.length;) {
+            if (signers[i] == signer) return true;
+            unchecked {
+                ++i;
+            }
+        }
+
+        return false;
     }
 }

@@ -40,4 +40,20 @@ contract ComptrollerConnector is IFarmConnector {
             address(this), comptrollerExtraData.cTokens
         );
     }
+
+    function balanceOf(
+        Farm calldata farm,
+        address user
+    ) external view override returns (uint256) {
+        return CTokenInterface(farm.stakingContract).balanceOf(user);
+    }
+
+    function earned(
+        Farm calldata,
+        address,
+        address[] calldata rewardTokens
+    ) external pure override returns (uint256[] memory) {
+        // Not available onchain
+        return new uint256[](rewardTokens.length);
+    }
 }

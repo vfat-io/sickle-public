@@ -45,6 +45,7 @@ struct NftHarvest {
     SimpleNftHarvest harvest;
     SwapParams[] swaps;
     address[] outputTokens;
+    address[] sweepTokens;
 }
 
 struct NftCompound {
@@ -58,4 +59,12 @@ struct NftRebalance {
     NftHarvest harvest;
     NftWithdraw withdraw;
     NftIncrease increase;
+}
+
+struct NftMove {
+    IUniswapV3Pool pool;
+    NftPosition position;
+    NftHarvest harvest;
+    NftWithdraw withdraw;
+    NftDeposit deposit;
 }

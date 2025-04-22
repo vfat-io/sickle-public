@@ -84,8 +84,8 @@ contract MultiFarmStrategy is
     ) external {
         Sickle sickle = getSickle(msg.sender);
 
-        _harvest_erc20_positions(sickle, params.claims);
-        _harvest_nft_positions(sickle, params.nftClaims);
+        _harvestErc20Positions(sickle, params.claims);
+        _harvestNftPositions(sickle, params.nftClaims);
 
         address[] memory targets = new address[](4);
         bytes[] memory data = new bytes[](4);
@@ -121,7 +121,7 @@ contract MultiFarmStrategy is
 
         sickle.multicall(targets, data);
 
-        _emit_compound_events(
+        _emitCompoundEvents(
             sickle, params.depositFarm, params.claims, params.nftClaims
         );
     }
@@ -137,11 +137,11 @@ contract MultiFarmStrategy is
     ) external {
         Sickle sickle = getSickle(msg.sender);
 
-        _harvest_erc20_positions(sickle, params.claims);
-        _harvest_nft_positions(sickle, params.nftClaims);
+        _harvestErc20Positions(sickle, params.claims);
+        _harvestNftPositions(sickle, params.nftClaims);
 
         if (!params.compoundInPlace) {
-            _withdraw_nft(
+            _withdrawNft(
                 sickle, params.depositPosition, params.depositExtraData
             );
         }
@@ -169,12 +169,10 @@ contract MultiFarmStrategy is
         sickle.multicall(targets, data);
 
         if (!params.compoundInPlace) {
-            _deposit_nft(
-                sickle, params.depositPosition, params.depositExtraData
-            );
+            _depositNft(sickle, params.depositPosition, params.depositExtraData);
         }
 
-        _emit_compound_events(
+        _emitCompoundEvents(
             sickle, params.depositPosition.farm, params.claims, params.nftClaims
         );
     }
@@ -190,8 +188,8 @@ contract MultiFarmStrategy is
     ) public {
         Sickle sickle = getSickle(msg.sender);
 
-        _harvest_erc20_positions(sickle, params.claims);
-        _harvest_nft_positions(sickle, params.nftClaims);
+        _harvestErc20Positions(sickle, params.claims);
+        _harvestNftPositions(sickle, params.nftClaims);
 
         address[] memory targets = new address[](3);
         bytes[] memory data = new bytes[](3);
@@ -211,12 +209,12 @@ contract MultiFarmStrategy is
 
         sickle.multicall(targets, data);
 
-        _emit_harvest_events(sickle, params.claims, params.nftClaims);
+        _emitHarvestEvents(sickle, params.claims, params.nftClaims);
     }
 
     /* Private Functions */
 
-    function _harvest_erc20_positions(
+    function _harvestErc20Positions(
         Sickle sickle,
         ClaimParams[] calldata params
     ) private {
@@ -224,7 +222,7 @@ contract MultiFarmStrategy is
         address[] memory targets = new address[](arrayLength);
         bytes[] memory data = new bytes[](arrayLength);
 
-        for (uint256 i; i < arrayLength; i++) {
+        for (uint256 i; i < arrayLength;) {
             ClaimParams calldata claim = params[i];
             address farmConnector =
                 connectorRegistry.connectorOf(claim.claimFarm.stakingContract);
@@ -233,12 +231,15 @@ contract MultiFarmStrategy is
             data[i] = abi.encodeCall(
                 IFarmConnector.claim, (claim.claimFarm, claim.claimExtraData)
             );
+            unchecked {
+                ++i;
+            }
         }
 
         sickle.multicall(targets, data);
     }
 
-    function _harvest_nft_positions(
+    function _harvestNftPositions(
         Sickle sickle,
         NftClaimParams[] calldata params
     ) private {
@@ -246,7 +247,7 @@ contract MultiFarmStrategy is
         address[] memory targets = new address[](arrayLength);
         bytes[] memory data = new bytes[](arrayLength);
 
-        for (uint256 i; i < arrayLength; i++) {
+        for (uint256 i; i < arrayLength;) {
             NftClaimParams calldata claim = params[i];
             address farmConnector = connectorRegistry.connectorOf(
                 claim.position.farm.stakingContract
@@ -263,12 +264,15 @@ contract MultiFarmStrategy is
                     claim.harvest.extraData
                 )
             );
+            unchecked {
+                ++i;
+            }
         }
 
         sickle.multicall(targets, data);
     }
 
-    function _withdraw_nft(
+    function _withdrawNft(
         Sickle sickle,
         NftPosition calldata position,
         bytes calldata extraData
@@ -286,7 +290,7 @@ contract MultiFarmStrategy is
         sickle.multicall(targets, data);
     }
 
-    function _deposit_nft(
+    function _depositNft(
         Sickle sickle,
         NftPosition calldata position,
         bytes calldata extraData
@@ -305,37 +309,43 @@ contract MultiFarmStrategy is
         sickle.multicall(targets, data);
     }
 
-    function _emit_harvest_events(
+    function _emitHarvestEvents(
         Sickle sickle,
         ClaimParams[] calldata claims,
         NftClaimParams[] calldata nftClaims
     ) private {
-        for (uint256 i = 0; i < claims.length; i++) {
+        for (uint256 i = 0; i < claims.length;) {
             emit SickleHarvested(
                 sickle,
                 claims[i].claimFarm.stakingContract,
                 claims[i].claimFarm.poolIndex
             );
+            unchecked {
+                ++i;
+            }
         }
 
-        for (uint256 i = 0; i < nftClaims.length; i++) {
+        for (uint256 i = 0; i < nftClaims.length;) {
             emit SickleHarvestedNft(
                 sickle,
-                nftClaims[i].position.farm.stakingContract,
-                nftClaims[i].position.farm.poolIndex,
                 nftClaims[i].position.nft,
-                nftClaims[i].position.tokenId
+                nftClaims[i].position.tokenId,
+                nftClaims[i].position.farm.stakingContract,
+                nftClaims[i].position.farm.poolIndex
             );
+            unchecked {
+                ++i;
+            }
         }
     }
 
-    function _emit_compound_events(
+    function _emitCompoundEvents(
         Sickle sickle,
         Farm calldata depositFarm,
         ClaimParams[] calldata claims,
         NftClaimParams[] calldata nftClaims
     ) private {
-        for (uint256 i = 0; i < claims.length; i++) {
+        for (uint256 i = 0; i < claims.length;) {
             emit SickleCompounded(
                 sickle,
                 claims[i].claimFarm.stakingContract,
@@ -343,16 +353,22 @@ contract MultiFarmStrategy is
                 depositFarm.stakingContract,
                 depositFarm.poolIndex
             );
+            unchecked {
+                ++i;
+            }
         }
 
-        for (uint256 i = 0; i < nftClaims.length; i++) {
+        for (uint256 i = 0; i < nftClaims.length;) {
             emit SickleCompoundedNft(
                 sickle,
-                depositFarm.stakingContract,
-                depositFarm.poolIndex,
                 nftClaims[i].position.nft,
-                nftClaims[i].position.tokenId
+                nftClaims[i].position.tokenId,
+                depositFarm.stakingContract,
+                depositFarm.poolIndex
             );
+            unchecked {
+                ++i;
+            }
         }
     }
 }

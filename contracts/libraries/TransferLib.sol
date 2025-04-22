@@ -13,7 +13,8 @@ import { ITransferLib } from "contracts/interfaces/libraries/ITransferLib.sol";
 
 contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-
+    address public constant UNISWAP_ETH =
+        0x0000000000000000000000000000000000000000;
     WETH public immutable weth;
 
     IFeesLib public immutable feesLib;
@@ -28,13 +29,14 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
     /// @param token Address of the token to transfer
     function transferTokenToUser(
         address token
-    ) public payable checkTransferTo(token) {
+    ) public payable {
         address recipient = Sickle(payable(address(this))).owner();
-        if (token == ETH) {
+        if (token == ETH || token == UNISWAP_ETH) {
             uint256 wethBalance = weth.balanceOf(address(this));
             if (wethBalance > 0) {
                 weth.withdraw(wethBalance);
             }
+
             if (address(this).balance > 0) {
                 SafeTransferLib.safeTransferETH(
                     recipient, address(this).balance
@@ -76,7 +78,7 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
         address strategy,
         bytes4 feeSelector
     ) public payable checkTransferFrom(tokenIn, amountIn) {
-        _checkMsgValue(amountIn, tokenIn == ETH);
+        _checkMsgValue(amountIn, tokenIn == ETH || tokenIn == UNISWAP_ETH);
 
         _transferTokenFromUser(tokenIn, amountIn, strategy, feeSelector);
     }
@@ -97,7 +99,7 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
         bool hasEth = false;
 
         for (uint256 i; i < tokensIn.length; i++) {
-            if (tokensIn[i] == ETH) {
+            if (tokensIn[i] == ETH || tokensIn[i] == UNISWAP_ETH) {
                 _checkMsgValue(amountsIn[i], true);
                 hasEth = true;
             }
@@ -120,7 +122,7 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
         address strategy,
         bytes4 feeSelector
     ) internal {
-        if (tokenIn != ETH) {
+        if (tokenIn != ETH && tokenIn != UNISWAP_ETH) {
             SafeTransferLib.safeTransferFrom(
                 tokenIn,
                 Sickle(payable(address(this))).owner(),
@@ -143,9 +145,6 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
     }
 
     modifier checkTransferFrom(address tokenIn, uint256 amountIn) {
-        if (tokenIn == address(0)) {
-            revert TokenInRequired();
-        }
         if (amountIn == 0) {
             revert AmountInRequired();
         }
@@ -164,27 +163,27 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
             revert TokenInRequired();
         }
         for (uint256 i; i < tokenLength; i++) {
-            if (tokensIn[i] == address(0)) {
-                revert TokenInRequired();
-            }
             if (amountsIn[i] == 0) {
                 revert AmountInRequired();
             }
         }
-        if (tokenLength == 2 && tokensIn[0] == tokensIn[1]) {
-            revert SameTokenIn();
-        }
-        if (tokenLength > 2) {
-            revert TwoTokenMaximum();
-        }
-        _;
-    }
-
-    modifier checkTransferTo(
-        address tokenOut
-    ) {
-        if (tokenOut == address(0)) {
-            revert TokenOutRequired();
+        bool hasETH = false;
+        bool hasUniswapETH = false;
+        for (uint256 i; i < tokenLength; i++) {
+            if (tokensIn[i] == ETH) {
+                hasETH = true;
+            }
+            if (tokensIn[i] == UNISWAP_ETH) {
+                hasUniswapETH = true;
+            }
+            if (hasETH && hasUniswapETH) {
+                revert IncompatibleEthTokens();
+            }
+            for (uint256 j = i + 1; j < tokenLength; j++) {
+                if (tokensIn[i] == tokensIn[j]) {
+                    revert DuplicateTokenIn();
+                }
+            }
         }
         _;
     }
@@ -195,11 +194,6 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
         uint256 tokenLength = tokensOut.length;
         if (tokenLength == 0) {
             revert TokenOutRequired();
-        }
-        for (uint256 i; i < tokenLength; i++) {
-            if (tokensOut[i] == address(0)) {
-                revert TokenOutRequired();
-            }
         }
         _;
     }

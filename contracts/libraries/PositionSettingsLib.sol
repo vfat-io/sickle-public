@@ -18,9 +18,11 @@ contract PositionSettingsLib is IPositionSettingsLib {
         Farm calldata farm,
         PositionSettings calldata settings
     ) external {
-        PositionKey memory key = PositionKey(
-            Sickle(payable(address(this))), farm.stakingContract, farm.poolIndex
-        );
+        PositionKey memory key = PositionKey({
+            sickle: Sickle(payable(address(this))),
+            stakingContract: farm.stakingContract,
+            poolIndex: farm.poolIndex
+        });
         positionSettingsRegistry.setPositionSettings(key, settings);
     }
 }

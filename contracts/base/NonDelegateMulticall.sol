@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { SickleStorage } from "contracts/base/SickleStorage.sol";
 import { SickleRegistry } from "contracts/SickleRegistry.sol";
 
 /// @title Multicall contract
 /// @author vfat.tools
 /// @notice Enables calling multiple methods in a single call to the contract
-abstract contract NonDelegateMulticall is SickleStorage {
+abstract contract NonDelegateMulticall {
     /// ERRORS ///
 
     error MulticallParamsMismatchError(); // 0xc1e637c9
@@ -29,7 +28,9 @@ abstract contract NonDelegateMulticall is SickleStorage {
     /// INITIALIZATION ///
 
     /// @param registry_ Address of the SickleRegistry contract
-    constructor(SickleRegistry registry_) initializer {
+    constructor(
+        SickleRegistry registry_
+    ) {
         registry = registry_;
     }
 

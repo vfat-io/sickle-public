@@ -6,10 +6,13 @@ import { NuriGaugeConnector } from
     "contracts/connectors/nuri/NuriGaugeConnector.sol";
 import { NuriV3Connector } from "contracts/connectors/nuri/NuriV3Connector.sol";
 import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
-import { IGaugeV2 } from "contracts/interfaces/external/ramses/IGaugeV2.sol";
+import { IRamsesV2Gauge } from
+    "contracts/interfaces/external/ramses/IRamsesV2Gauge.sol";
 
 interface INuriPairFactory {
-    function isPair(address pair) external view returns (bool);
+    function isPair(
+        address pair
+    ) external view returns (bool);
 }
 
 contract NuriGaugeRegistry is ICustomConnectorRegistry {
@@ -33,17 +36,14 @@ contract NuriGaugeRegistry is ICustomConnectorRegistry {
         nuriCLGaugeFactory = nuriCLGaugeFactory_;
     }
 
-    function connectorOf(address target)
-        external
-        view
-        override
-        returns (address)
-    {
+    function connectorOf(
+        address target
+    ) external view override returns (address) {
         if (voter.isGauge(target)) {
             if (nuriPairFactory.isPair(voter.poolForGauge(target))) {
                 return address(nuriGaugeConnector);
             }
-            address gaugeFactory = IGaugeV2(target).gaugeFactory();
+            address gaugeFactory = IRamsesV2Gauge(target).gaugeFactory();
             if (gaugeFactory == nuriCLGaugeFactory) {
                 return address(nuriV3Connector);
             }

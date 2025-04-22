@@ -40,8 +40,10 @@ contract NftZapLib is DelegateModule, INftZapLib {
 
         NftAddLiquidity memory addLiquidityParams = zap.addLiquidityParams;
         if (addLiquidityParams.amount0Desired == 0) {
-            addLiquidityParams.amount0Desired =
-                IERC20(addLiquidityParams.pool.token0).balanceOf(address(this));
+            addLiquidityParams.amount0Desired = addLiquidityParams.pool.token0
+                == address(0)
+                ? address(this).balance
+                : IERC20(addLiquidityParams.pool.token0).balanceOf(address(this));
         }
         if (addLiquidityParams.amount1Desired == 0) {
             addLiquidityParams.amount1Desired =
@@ -49,16 +51,18 @@ contract NftZapLib is DelegateModule, INftZapLib {
         }
         if (addLiquidityParams.amount0Desired > 0) {
             atLeastOneNonZero = true;
-            SafeTransferLib.safeApprove(
-                addLiquidityParams.pool.token0,
-                address(addLiquidityParams.nft),
-                0
-            );
-            SafeTransferLib.safeApprove(
-                addLiquidityParams.pool.token0,
-                address(addLiquidityParams.nft),
-                addLiquidityParams.amount0Desired
-            );
+            if (addLiquidityParams.pool.token0 != address(0)) {
+                SafeTransferLib.safeApprove(
+                    addLiquidityParams.pool.token0,
+                    address(addLiquidityParams.nft),
+                    0
+                );
+                SafeTransferLib.safeApprove(
+                    addLiquidityParams.pool.token0,
+                    address(addLiquidityParams.nft),
+                    addLiquidityParams.amount0Desired
+                );
+            }
         }
         if (addLiquidityParams.amount1Desired > 0) {
             atLeastOneNonZero = true;
@@ -88,9 +92,13 @@ contract NftZapLib is DelegateModule, INftZapLib {
             )
         );
 
-        SafeTransferLib.safeApprove(
-            addLiquidityParams.pool.token0, address(addLiquidityParams.nft), 0
-        );
+        if (addLiquidityParams.pool.token0 != address(0)) {
+            SafeTransferLib.safeApprove(
+                addLiquidityParams.pool.token0,
+                address(addLiquidityParams.nft),
+                0
+            );
+        }
         SafeTransferLib.safeApprove(
             addLiquidityParams.pool.token1, address(addLiquidityParams.nft), 0
         );

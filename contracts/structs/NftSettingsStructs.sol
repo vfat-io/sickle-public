@@ -77,10 +77,12 @@ struct RebalanceConfig {
  */
 struct NftSettings {
     IUniswapV3Pool pool;
+    bytes32 poolId;
     bool autoRebalance;
     RebalanceConfig rebalanceConfig;
     bool automateRewards;
     RewardConfig rewardConfig;
     bool autoExit;
     ExitConfig exitConfig;
+    bytes extraData;
 }

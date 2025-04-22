@@ -18,13 +18,6 @@ contract CompoundMarketConnector is ILendingConnector {
         uint256 amount,
         bytes memory // extraData
     ) external payable override {
-        CErc20Interface cToken = CErc20Interface(target);
-        SafeTransferLib.safeApprove(cToken.underlying(), target, amount);
-        uint256 error = cToken.mint(amount);
-        if (error != 0) {
-            revert CompoundActionFailed("mint", error);
-        }
-
         address[] memory markets = new address[](1);
         markets[0] = target;
         uint256[] memory results = ComptrollerInterface(
@@ -32,6 +25,13 @@ contract CompoundMarketConnector is ILendingConnector {
         ).enterMarkets(markets);
         if (results[0] != 0) {
             revert CompoundActionFailed("enterMarkets", results[0]);
+        }
+
+        CErc20Interface cToken = CErc20Interface(target);
+        SafeTransferLib.safeApprove(cToken.underlying(), target, amount);
+        uint256 error = cToken.mint(amount);
+        if (error != 0) {
+            revert CompoundActionFailed("mint", error);
         }
     }
 

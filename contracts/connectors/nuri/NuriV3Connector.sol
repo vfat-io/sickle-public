@@ -6,10 +6,10 @@ import { INuriNonfungiblePositionManager } from
 import { NftAddLiquidity } from "contracts/structs/NftLiquidityStructs.sol";
 import { RamsesV3Connector } from
     "contracts/connectors/ramses/RamsesV3Connector.sol";
+import { IUniswapV3PoolState } from
+    "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
 
 contract NuriV3Connector is RamsesV3Connector {
-    constructor() { }
-
     function _mint(
         NftAddLiquidity memory addLiquidityParams
     ) internal override {
@@ -25,11 +25,30 @@ contract NuriV3Connector is RamsesV3Connector {
             amount0Min: addLiquidityParams.amount0Min,
             amount1Min: addLiquidityParams.amount1Min,
             recipient: address(this),
-            deadline: block.timestamp + 1
+            deadline: block.timestamp
         });
 
         INuriNonfungiblePositionManager(address(addLiquidityParams.nft)).mint(
             params
         );
+    }
+
+    function feeGrowthOutside(
+        address pool,
+        bytes32, // poolId
+        int24 tick
+    )
+        external
+        view
+        override
+        returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
+    {
+        (, bytes memory result) = address(pool).staticcall(
+            abi.encodeCall(IUniswapV3PoolState.ticks, (tick))
+        );
+        assembly {
+            feeGrowthOutside0X128 := mload(add(result, 96))
+            feeGrowthOutside1X128 := mload(add(result, 128))
+        }
     }
 }

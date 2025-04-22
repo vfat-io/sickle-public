@@ -9,65 +9,77 @@ import { Sickle } from "contracts/Sickle.sol";
 abstract contract NftFarmStrategyEvents {
     event SickleDepositedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleIncreasedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleHarvestedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleCompoundedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleWithdrewNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleDecreasedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleExitedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
     );
 
     event SickleRebalancedNft(
         Sickle indexed sickle,
-        address indexed stakingContract,
-        uint256 indexed poolIndex,
-        INonfungiblePositionManager nft,
-        uint256 tokenId
+        INonfungiblePositionManager indexed nft,
+        uint256 indexed tokenId,
+        address stakingContract,
+        uint256 poolIndex
+    );
+
+    event SickleMovedNft(
+        Sickle indexed sickle,
+        INonfungiblePositionManager indexed fromNft,
+        uint256 indexed fromTokenId,
+        address fromStakingContract,
+        uint256 fromPoolIndex,
+        INonfungiblePositionManager toNft,
+        uint256 toTokenId,
+        address toStakingContract,
+        uint256 toPoolIndex
     );
 }

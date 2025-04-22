@@ -3,6 +3,8 @@ pragma solidity ^0.8.17;
 
 import { INonfungiblePositionManager } from
     "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
+import { IPositionManager } from
+    "contracts/interfaces/external/uniswap/v4/IPositionManager.sol";
 
 import {
     INftSettingsRegistry,
@@ -15,26 +17,19 @@ import { INftSettingsLib } from
     "contracts/interfaces/libraries/INftSettingsLib.sol";
 
 contract NftSettingsLib is INftSettingsLib {
-    function resetNftSettings(
+    function transferNftSettings(
         INftSettingsRegistry nftSettingsRegistry,
         INonfungiblePositionManager nftManager,
         uint256 tokenId
     ) external {
-        NftKey memory key =
-            NftKey(Sickle(payable(address(this))), nftManager, tokenId);
+        NftKey memory key = NftKey({
+            sickle: Sickle(payable(address(this))),
+            nftManager: nftManager,
+            tokenId: tokenId
+        });
         NftSettings memory settings = nftSettingsRegistry.getNftSettings(key);
 
-        uint256 newTokenId = nftManager.tokenOfOwnerByIndex(
-            address(this), nftManager.balanceOf(address(this)) - 1
-        );
-
-        if (newTokenId == key.tokenId) {
-            revert TokenIdUnchanged();
-        }
-
-        NftKey memory newKey = NftKey(key.sickle, key.nftManager, newTokenId);
-
-        nftSettingsRegistry.resetNftSettings(key, newKey, settings);
+        nftSettingsRegistry.transferNftSettings(key, settings);
     }
 
     function setNftSettings(
@@ -43,8 +38,11 @@ contract NftSettingsLib is INftSettingsLib {
         uint256 tokenId,
         NftSettings calldata settings
     ) external {
-        NftKey memory key =
-            NftKey(Sickle(payable(address(this))), nftManager, tokenId);
+        NftKey memory key = NftKey({
+            sickle: Sickle(payable(address(this))),
+            nftManager: nftManager,
+            tokenId: tokenId
+        });
         nftSettingsRegistry.setNftSettings(key, settings);
     }
 }

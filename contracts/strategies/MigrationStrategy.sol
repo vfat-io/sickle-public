@@ -27,8 +27,14 @@ interface IOldFarmConnector {
     ) external;
 }
 
+interface IOldSickleFactory {
+    function admins(
+        address sickle
+    ) external view returns (address);
+}
+
 contract MigrationStrategy {
-    SickleFactory public immutable oldFactory;
+    IOldSickleFactory public immutable oldFactory;
     SickleFactory public immutable newFactory;
     ConnectorRegistry public immutable oldConnectorRegistry;
     ConnectorRegistry public immutable connectorRegistry;
@@ -37,7 +43,7 @@ contract MigrationStrategy {
     error NotOwner(address sender);
 
     constructor(
-        SickleFactory oldFactory_,
+        IOldSickleFactory oldFactory_,
         SickleFactory newFactory_,
         ConnectorRegistry oldConnectorRegistry_,
         ConnectorRegistry connectorRegistry_

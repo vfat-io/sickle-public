@@ -94,7 +94,21 @@ contract MorphoConnector is ILendingConnector {
         bytes memory extraData
     ) external payable override {
         MorphoExtraData memory data = abi.decode(extraData, (MorphoExtraData));
-        SafeTransferLib.safeApprove(data.marketParams.loanToken, target, amount);
-        IMorpho(target).repay(data.marketParams, amount, 0, borrower, "");
+        if (amount == 0) {
+            // Repay all
+            Position memory position =
+                IMorpho(target).position(data.id, borrower);
+            uint256 shares = position.borrowShares;
+            SafeTransferLib.safeApprove(
+                data.marketParams.loanToken, target, type(uint256).max
+            );
+            IMorpho(target).repay(data.marketParams, 0, shares, borrower, "");
+            SafeTransferLib.safeApprove(data.marketParams.loanToken, target, 0);
+        } else {
+            SafeTransferLib.safeApprove(
+                data.marketParams.loanToken, target, amount
+            );
+            IMorpho(target).repay(data.marketParams, amount, 0, borrower, "");
+        }
     }
 }

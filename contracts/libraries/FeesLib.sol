@@ -7,6 +7,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Sickle } from "contracts/Sickle.sol";
 import { SickleRegistry } from "contracts/SickleRegistry.sol";
 import { IFeesLib } from "contracts/interfaces/libraries/IFeesLib.sol";
+import { BPS_BASIS } from "contracts/base/Constants.sol";
 
 contract FeesLib is IFeesLib {
     /// @notice Fees library version
@@ -19,6 +20,8 @@ contract FeesLib is IFeesLib {
     WETH public immutable weth;
 
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public constant UNISWAP_ETH =
+        0x0000000000000000000000000000000000000000;
 
     constructor(SickleRegistry registry_, WETH weth_) {
         registry = registry_;
@@ -45,7 +48,7 @@ contract FeesLib is IFeesLib {
         );
 
         if (feeBasis == 0) {
-            if (feeToken == ETH) {
+            if (feeToken == ETH || feeToken == UNISWAP_ETH) {
                 uint256 wethBalance = weth.balanceOf(address(this));
                 if (wethBalance > 0) {
                     weth.withdraw(wethBalance);
@@ -56,13 +59,13 @@ contract FeesLib is IFeesLib {
             }
         }
 
-        uint256 amountToCharge = feeBasis * fee / 10_000;
+        uint256 amountToCharge = feeBasis * fee / BPS_BASIS;
 
         if (amountToCharge == 0) {
             return feeBasis;
         }
 
-        if (feeToken == ETH) {
+        if (feeToken == ETH || feeToken == UNISWAP_ETH) {
             SafeTransferLib.safeTransferETH(
                 registry.collector(), amountToCharge
             );
@@ -95,6 +98,8 @@ contract FeesLib is IFeesLib {
     ) public view returns (uint256) {
         if (token == ETH) {
             return weth.balanceOf(address(sickle));
+        } else if (token == UNISWAP_ETH) {
+            return address(sickle).balance;
         }
         return IERC20(token).balanceOf(address(sickle));
     }

@@ -13,9 +13,9 @@ contract SickleFactory is Admin {
     /// EVENTS ///
 
     /// @notice Emitted when a new Sickle contract is deployed
-    /// @param admin Address receiving the admin rights of the Sickle contract
+    /// @param owner Address that owns the Sickle contract
     /// @param sickle Address of the newly deployed Sickle contract
-    event Deploy(address indexed admin, address sickle);
+    event Deploy(address indexed owner, address sickle);
 
     /// @notice Thrown when the caller is not whitelisted
     /// @param caller Address of the non-whitelisted caller
@@ -30,8 +30,8 @@ contract SickleFactory is Admin {
     /// STORAGE ///
 
     mapping(address => address) private _sickles;
-    mapping(address => address) private _admins;
-    mapping(address => bytes32) public _referralCodes;
+    mapping(address => address) private _owners;
+    mapping(address => bytes32) private _referralCodes;
 
     /// @notice Address of the SickleRegistry contract
     SickleRegistry public immutable registry;
@@ -66,38 +66,42 @@ contract SickleFactory is Admin {
 
     /// @notice Update the isActive flag.
     /// @dev Effectively pauses and unpauses new Sickle deployments.
-    /// @custom:access Restricted to protocol admin.
-    function setActive(bool active) external onlyAdmin {
+    /// @custom:access Restricted to protocol owner.
+    function setActive(
+        bool active
+    ) external onlyAdmin {
         isActive = active;
     }
 
     function _deploy(
-        address admin,
+        address owner,
         address approved,
         bytes32 referralCode
     ) internal returns (address sickle) {
         sickle = Clones.cloneDeterministic(
-            implementation, keccak256(abi.encode(admin))
+            implementation, keccak256(abi.encode(owner))
         );
-        Sickle(payable(sickle)).initialize(admin, approved);
-        _sickles[admin] = sickle;
-        _admins[sickle] = admin;
+        Sickle(payable(sickle)).initialize(owner, approved);
+        _sickles[owner] = sickle;
+        _owners[sickle] = owner;
         if (referralCode != bytes32(0)) {
             _referralCodes[sickle] = referralCode;
         }
-        emit Deploy(admin, sickle);
+        emit Deploy(owner, sickle);
     }
 
-    function _getSickle(address admin) internal returns (address sickle) {
-        sickle = _sickles[admin];
+    function _getSickle(
+        address owner
+    ) internal returns (address sickle) {
+        sickle = _sickles[owner];
         if (sickle != address(0)) {
             return sickle;
         }
         if (address(previousFactory) != address(0)) {
-            sickle = previousFactory.sickles(admin);
+            sickle = previousFactory.sickles(owner);
             if (sickle != address(0)) {
-                _sickles[admin] = sickle;
-                _admins[sickle] = admin;
+                _sickles[owner] = sickle;
+                _owners[sickle] = owner;
                 _referralCodes[sickle] = previousFactory.referralCodes(sickle);
                 return sickle;
             }
@@ -105,41 +109,45 @@ contract SickleFactory is Admin {
     }
 
     /// @notice Predict the address of a Sickle contract for a specific user
-    /// @param admin Address receiving the admin rights of the Sickle contract
+    /// @param owner Address that owns the Sickle contract
     /// @return sickle Address of the predicted Sickle contract
-    function predict(address admin) external view returns (address) {
-        bytes32 salt = keccak256(abi.encode(admin));
+    function predict(
+        address owner
+    ) external view returns (address) {
+        bytes32 salt = keccak256(abi.encode(owner));
         return Clones.predictDeterministicAddress(implementation, salt);
     }
 
     /// @notice Returns the Sickle contract for a specific user
-    /// @param admin Address that owns the Sickle contract
+    /// @param owner Address that owns the Sickle contract
     /// @return sickle Address of the Sickle contract
-    function sickles(address admin) external view returns (address sickle) {
-        sickle = _sickles[admin];
+    function sickles(
+        address owner
+    ) external view returns (address sickle) {
+        sickle = _sickles[owner];
         if (sickle == address(0) && address(previousFactory) != address(0)) {
-            sickle = previousFactory.sickles(admin);
+            sickle = previousFactory.sickles(owner);
         }
     }
 
-    /// @notice Returns the admin for a specific Sickle contract
+    /// @notice Returns the owner for a specific Sickle contract
     /// @param sickle Address of the Sickle contract
-    /// @return admin Address that owns the Sickle contract
-    function admins(address sickle) external view returns (address admin) {
-        admin = _admins[sickle];
-        if (admin == address(0) && address(previousFactory) != address(0)) {
-            admin = previousFactory.admins(sickle);
+    /// @return owner Address that owns the Sickle contract
+    function owners(
+        address sickle
+    ) external view returns (address owner) {
+        owner = _owners[sickle];
+        if (owner == address(0) && address(previousFactory) != address(0)) {
+            owner = previousFactory.owners(sickle);
         }
     }
 
     /// @notice Returns the referral code for a specific Sickle contract
     /// @param sickle Address of the Sickle contract
     /// @return referralCode Referral code for the user
-    function referralCodes(address sickle)
-        external
-        view
-        returns (bytes32 referralCode)
-    {
+    function referralCodes(
+        address sickle
+    ) external view returns (bytes32 referralCode) {
         referralCode = _referralCodes[sickle];
         if (
             referralCode == bytes32(0) && address(previousFactory) != address(0)
@@ -150,11 +158,13 @@ contract SickleFactory is Admin {
 
     /// @notice Deploys a new Sickle contract for a specific user, or returns
     /// the existing one if it exists
-    /// @param admin Address receiving the admin rights of the Sickle contract
+    /// @param owner Address that owns the Sickle contract
+    /// @param approved Address that is approved to call automation functions
+    /// for the Sickle
     /// @param referralCode Referral code for the user
     /// @return sickle Address of the deployed Sickle contract
     function getOrDeploy(
-        address admin,
+        address owner,
         address approved,
         bytes32 referralCode
     ) external returns (address sickle) {
@@ -164,16 +174,18 @@ contract SickleFactory is Admin {
         if (!registry.isWhitelistedCaller(msg.sender)) {
             revert CallerNotWhitelisted(msg.sender);
         }
-        if ((sickle = _getSickle(admin)) != address(0)) {
+        if ((sickle = _getSickle(owner)) != address(0)) {
             return sickle;
         }
-        return _deploy(admin, approved, referralCode);
+        return _deploy(owner, approved, referralCode);
     }
 
     /// @notice Deploys a new Sickle contract for a specific user
     /// @dev Sickle contracts are deployed with create2, the address of the
-    /// admin is used as a salt, so all the Sickle addresses can be pre-computed
+    /// owner is used as a salt, so all the Sickle addresses can be pre-computed
     /// and only 1 Sickle will exist per address
+    /// @param approved Address that is approved to call automation functions
+    /// for the Sickle
     /// @param referralCode Referral code for the user
     /// @return sickle Address of the deployed Sickle contract
     function deploy(

@@ -15,8 +15,6 @@ struct MasterchefExtraData {
 }
 
 contract MasterchefWithReferrerConnector is MasterchefConnector {
-    constructor() { }
-
     function deposit(
         Farm calldata farm,
         address token,

@@ -5,6 +5,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IMorpho } from "@morpho-blue/interfaces/IMorpho.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
+import { BPS_BASIS } from "contracts/base/Constants.sol";
 import { Admin } from "contracts/base/Admin.sol";
 import { ILendingPoolV2 } from
     "contracts/interfaces/external/flashloans/ILendingPoolV2.sol";
@@ -59,6 +60,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
     error FlashloanAlreadyInitiated();
     error FlashloanNotReset();
     error NotAnAssetPair();
+    error InvalidAssetOrder();
     error UnauthorizedOperation();
     error SenderIsNotStrategy();
     error SenderIsNotAaveLendingPool();
@@ -181,7 +183,9 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         }
     }
 
-    modifier callbackSafetyCheck(bytes memory params) {
+    modifier callbackSafetyCheck(
+        bytes memory params
+    ) {
         bytes32 hashCheck = keccak256(params);
         if (hashCheck != flashloanDataHash) {
             revert InvalidFlashloanData();
@@ -282,6 +286,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             );
         } else if (providerType == FlashloanProvider.UNIV2) {
             if (assets.length != 2) revert NotAnAssetPair();
+            if (assets[0] > assets[1]) revert InvalidAssetOrder();
             address poolAddress = IUniswapV2Factory(quickswapFactoryAddr)
                 .getPair(assets[0], assets[1]);
             (,, uint256[] memory premiums,) =
@@ -296,6 +301,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             );
         } else if (providerType == FlashloanProvider.UNIV3) {
             if (assets.length != 2) revert NotAnAssetPair();
+            if (assets[0] > assets[1]) revert InvalidAssetOrder();
             address poolAddress = IUniswapV3Factory(uniswapV3FactoryAddr)
                 .getPool(assets[0], assets[1], providerFee);
             (,, uint256[] memory premiums,) =
@@ -308,15 +314,13 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             IUniswapV3Pool(poolAddress).flash(
                 address(this), amounts[0], amounts[1], uniswapFlashParams
             );
-        } else if (providerType == FlashloanProvider.MORPHO) {
+        } else {
             if (assets.length != 1) revert NotSingleAsset();
             bytes memory morphoParams =
                 abi.encode(sickleAddress, assets[0], params);
             // storing the hash of the callback data for safety checks
             flashloanDataHash = keccak256(morphoParams);
             IMorpho(morpho).flashLoan(assets[0], amounts[0], morphoParams);
-        } else {
-            revert UnauthorizedOperation();
         }
 
         // resetting the flashloanDataHash variable to zero bytes at the end of
@@ -616,12 +620,11 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             uint256 length = amounts.length;
             for (uint256 i; i < length;) {
                 if (amounts[i] > 0 && aaveV2FlashloanPremiumInBasisPoints > 0) {
-                    premiums[i] = (
-                        (amounts[i] * aaveV2FlashloanPremiumInBasisPoints - 1)
-                            / 10_000
-                    ) + 1;
-                } else {
-                    premiums[i] = 0;
+                    premiums[i] = // Rounding down
+                    (
+                        (amounts[i] * aaveV2FlashloanPremiumInBasisPoints)
+                            / BPS_BASIS
+                    );
                 }
 
                 unchecked {
@@ -634,12 +637,15 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             uint256 length = amounts.length;
             for (uint256 i; i < length;) {
                 if (amounts[i] > 0 && aaveV3FlashloanPremiumInBasisPoints > 0) {
-                    premiums[i] = (
-                        (amounts[i] * aaveV3FlashloanPremiumInBasisPoints - 1)
-                            / 10_000
-                    ) + 1;
-                } else {
-                    premiums[i] = 0;
+                    premiums[i] = // Rounding to nearest neighbor
+                    (
+                        (
+                            (
+                                amounts[i] * aaveV3FlashloanPremiumInBasisPoints
+                                    + (BPS_BASIS / 2)
+                            ) / BPS_BASIS
+                        )
+                    );
                 }
 
                 unchecked {
@@ -654,9 +660,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             for (uint256 i; i < length;) {
                 // reproducing the mulUp() function from Balancer's FixedPoint
                 // helper library
-                if (balancerFlashLoanFeePercentage == 0 || amounts[i] == 0) {
-                    premiums[i] = 0;
-                } else {
+                if (balancerFlashLoanFeePercentage != 0 && amounts[i] != 0) {
                     premiums[i] = (
                         (amounts[i] * balancerFlashLoanFeePercentage - 1) / 1e18
                     ) + 1;
@@ -671,8 +675,6 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             for (uint256 i; i < length;) {
                 if (amounts[i] > 0) {
                     premiums[i] = ((amounts[i] * 3) / 997) + 1;
-                } else {
-                    premiums[i] = 0;
                 }
 
                 unchecked {
@@ -684,10 +686,8 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             for (uint256 i; i < length;) {
                 if (amounts[i] > 0) {
                     premiums[i] =
-                        ((amounts[i] * providerFee) / 10_000 / 100) + 1; // hundredths
+                        ((amounts[i] * providerFee) / BPS_BASIS / 100) + 1; // hundredths
                         // of basis points
-                } else {
-                    premiums[i] = 0;
                 }
 
                 unchecked {
@@ -706,19 +706,10 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
     /// @dev helper function for uniswapV2Call and uniswapV3Call functions where
     /// the function selector is not at the beginning of the bytes parameter in
     /// the callback
-    function extractSelector(bytes memory params)
-        public
-        pure
-        returns (bytes4 selector)
-    {
-        assembly {
-            // 1. Load 4 bytes from `params`
-            // 2. Shift the bytes left by 224 bits/28 bytes so that they're at
-            //    the beginning of the 32-byte memory slot as required by
-            //    Solidity ABI spec
-            // 3. Store the result in `selector`
-            selector := shl(224, mload(add(params, 4)))
-        }
+    function extractSelector(
+        bytes memory params
+    ) public pure returns (bytes4 selector) {
+        selector = bytes4(params);
     }
 
     /// INTERNALS ///
@@ -798,11 +789,9 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         }
     }
 
-    function _checkSelector(bytes memory params)
-        internal
-        view
-        returns (address)
-    {
+    function _checkSelector(
+        bytes memory params
+    ) internal view returns (address) {
         // extracting function selector from the callback parameters
         bytes4 flashloanOpSelector = extractSelector(params);
 

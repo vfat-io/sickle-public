@@ -56,6 +56,21 @@ contract FlashloanLib is DelegateModule, LendingStructs {
         if (msg.sender != address(flashloanStrategy)) {
             revert FlashloanStrategy.NotFlashloanStrategy();
         }
+        if (assets.length != amounts.length || assets.length != premiums.length)
+        {
+            revert FlashloanStrategy.ParamsMismatch();
+        }
+        if (assets.length == 0 || assets.length > 2) {
+            revert FlashloanStrategy.NotSingleAsset();
+        }
+        if (assets.length == 2) {
+            if (amounts[0] > 0 && amounts[1] > 0) {
+                revert FlashloanStrategy.NotSingleAsset();
+            }
+            if (premiums[0] > 0 && premiums[1] > 0) {
+                revert FlashloanStrategy.NotSingleAsset();
+            }
+        }
 
         Sickle sickle = Sickle(payable(address(this)));
 
@@ -125,6 +140,21 @@ contract FlashloanLib is DelegateModule, LendingStructs {
         if (msg.sender != address(flashloanStrategy)) {
             revert FlashloanStrategy.NotFlashloanStrategy();
         }
+        if (assets.length != amounts.length || assets.length != premiums.length)
+        {
+            revert FlashloanStrategy.ParamsMismatch();
+        }
+        if (assets.length == 0 || assets.length > 2) {
+            revert FlashloanStrategy.NotSingleAsset();
+        }
+        if (assets.length == 2) {
+            if (amounts[0] > 0 && amounts[1] > 0) {
+                revert FlashloanStrategy.NotSingleAsset();
+            }
+            if (premiums[0] > 0 && premiums[1] > 0) {
+                revert FlashloanStrategy.NotSingleAsset();
+            }
+        }
 
         DecreaseParams memory decreaseParams =
             abi.decode(extraData, (DecreaseParams));
@@ -180,7 +210,9 @@ contract FlashloanLib is DelegateModule, LendingStructs {
         );
     }
 
-    function _chargeFlashloanFees(FlashloanedAsset memory params) internal {
+    function _chargeFlashloanFees(
+        FlashloanedAsset memory params
+    ) internal {
         _delegateTo(
             address(feesLib),
             abi.encodeCall(

@@ -103,7 +103,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
 
         _increase(sickle, params, sweepTokens, fee);
 
-        _set_position_settings(sickle, params.farm, positionSettings);
+        _setPositionSettings(sickle, params.farm, positionSettings);
 
         emit SickleDeposited(
             sickle, params.farm.stakingContract, params.farm.poolIndex
@@ -253,9 +253,9 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     ) public payable {
         Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
 
-        _simple_increase(sickle, params);
+        _simpleIncrease(sickle, params);
 
-        _set_position_settings(sickle, params.farm, positionSettings);
+        _setPositionSettings(sickle, params.farm, positionSettings);
 
         emit SickleDeposited(
             sickle, params.farm.stakingContract, params.farm.poolIndex
@@ -273,7 +273,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     ) public {
         Sickle sickle = getSickle(msg.sender);
 
-        _simple_increase(sickle, params);
+        _simpleIncrease(sickle, params);
 
         emit SickleDeposited(
             sickle, params.farm.stakingContract, params.farm.poolIndex
@@ -291,7 +291,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     ) external {
         Sickle sickle = getSickle(msg.sender);
 
-        _simple_harvest(sickle, farm, params);
+        _simpleHarvest(sickle, farm, params);
 
         emit SickleHarvested(sickle, farm.stakingContract, farm.poolIndex);
     }
@@ -307,7 +307,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     ) public {
         Sickle sickle = getSickle(msg.sender);
 
-        _simple_withdraw(sickle, farm, params);
+        _simpleWithdraw(sickle, farm, params);
 
         emit SickleWithdrawn(sickle, farm.stakingContract, farm.poolIndex);
     }
@@ -328,8 +328,8 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     ) external {
         Sickle sickle = getSickle(msg.sender);
 
-        _simple_harvest(sickle, farm, harvestParams);
-        _simple_withdraw(sickle, farm, withdrawParams);
+        _simpleHarvest(sickle, farm, harvestParams);
+        _simpleWithdraw(sickle, farm, withdrawParams);
 
         emit SickleExited(sickle, farm.stakingContract, farm.poolIndex);
     }
@@ -350,7 +350,11 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
         address[] calldata sweepTokens
     ) external override onlyApproved(sickle) {
         positionSettingsRegistry.validateHarvestFor(
-            PositionKey(sickle, farm.stakingContract, farm.poolIndex)
+            PositionKey({
+                sickle: sickle,
+                stakingContract: farm.stakingContract,
+                poolIndex: farm.poolIndex
+            })
         );
         _harvest(sickle, farm, params, sweepTokens, FarmStrategyFees.HarvestFor);
     }
@@ -368,11 +372,11 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
         address[] calldata sweepTokens
     ) external override onlyApproved(sickle) {
         positionSettingsRegistry.validateCompoundFor(
-            PositionKey(
-                sickle,
-                params.claimFarm.stakingContract,
-                params.claimFarm.poolIndex
-            )
+            PositionKey({
+                sickle: sickle,
+                stakingContract: params.claimFarm.stakingContract,
+                poolIndex: params.claimFarm.poolIndex
+            })
         );
         _compound(sickle, params, sweepTokens);
     }
@@ -399,7 +403,11 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
         address[] calldata withdrawSweepTokens
     ) external override onlyApproved(sickle) {
         positionSettingsRegistry.validateExitFor(
-            PositionKey(sickle, farm.stakingContract, farm.poolIndex)
+            PositionKey({
+                sickle: sickle,
+                stakingContract: farm.stakingContract,
+                poolIndex: farm.poolIndex
+            })
         );
         _exit(
             sickle,
@@ -414,7 +422,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
 
     /* Simple Private */
 
-    function _simple_increase(
+    function _simpleIncrease(
         Sickle sickle,
         SimpleDepositParams calldata params
     ) private {
@@ -436,7 +444,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
         sickle.multicall(targets, data);
     }
 
-    function _simple_withdraw(
+    function _simpleWithdraw(
         Sickle sickle,
         Farm calldata farm,
         SimpleWithdrawParams calldata params
@@ -458,7 +466,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
         sickle.multicall(targets, data);
     }
 
-    function _simple_harvest(
+    function _simpleHarvest(
         Sickle sickle,
         Farm calldata farm,
         SimpleHarvestParams calldata params
@@ -487,7 +495,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
 
     /* Private */
 
-    function _set_position_settings(
+    function _setPositionSettings(
         Sickle sickle,
         Farm calldata farm,
         PositionSettings calldata settings

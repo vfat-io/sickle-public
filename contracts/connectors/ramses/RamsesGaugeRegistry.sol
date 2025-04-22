@@ -7,10 +7,13 @@ import { RamsesGaugeConnector } from
 import { RamsesV3Connector } from
     "contracts/connectors/ramses/RamsesV3Connector.sol";
 import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
-import { IGaugeV2 } from "contracts/interfaces/external/ramses/IGaugeV2.sol";
+import { IRamsesV2Gauge } from
+    "contracts/interfaces/external/ramses/IRamsesV2Gauge.sol";
 
 interface IRamsesPairFactory {
-    function isPair(address pair) external view returns (bool);
+    function isPair(
+        address pair
+    ) external view returns (bool);
 }
 
 contract RamsesGaugeRegistry is ICustomConnectorRegistry {
@@ -34,17 +37,14 @@ contract RamsesGaugeRegistry is ICustomConnectorRegistry {
         ramsesCLGaugeFactory = ramsesCLGaugeFactory_;
     }
 
-    function connectorOf(address target)
-        external
-        view
-        override
-        returns (address)
-    {
+    function connectorOf(
+        address target
+    ) external view override returns (address) {
         if (voter.isGauge(target)) {
             if (ramsesPairFactory.isPair(voter.poolForGauge(target))) {
                 return address(ramsesGaugeConnector);
             }
-            address gaugeFactory = IGaugeV2(target).gaugeFactory();
+            address gaugeFactory = IRamsesV2Gauge(target).gaugeFactory();
             if (gaugeFactory == ramsesCLGaugeFactory) {
                 return address(ramsesV3Connector);
             }

@@ -11,9 +11,9 @@ import {
 } from "contracts/interfaces/INftSettingsRegistry.sol";
 
 interface INftSettingsLib {
-    error TokenIdUnchanged();
+    error InvalidTokenId();
 
-    function resetNftSettings(
+    function transferNftSettings(
         INftSettingsRegistry nftSettingsRegistry,
         INonfungiblePositionManager nftManager,
         uint256 tokenId
