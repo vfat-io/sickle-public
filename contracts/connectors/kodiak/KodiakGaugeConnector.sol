@@ -15,7 +15,7 @@ contract KodiakGaugeConnector is IFarmConnector {
         Farm calldata farm,
         address token,
         bytes memory // _extraData
-    ) external payable override {
+    ) external override {
         uint256 amount = IERC20(token).balanceOf(address(this));
         if (amount > 0) {
             SafeTransferLib.safeApprove(token, farm.stakingContract, amount);
@@ -61,5 +61,12 @@ contract KodiakGaugeConnector is IFarmConnector {
             rewards[i] = IKodiakRewardVault(farm.stakingContract).earned(user);
         }
         return rewards;
+    }
+
+    function isStaked(
+        Farm calldata,
+        address // user
+    ) external pure override returns (bool) {
+        return true;
     }
 }

@@ -2,11 +2,18 @@
 pragma solidity ^0.8.17;
 
 import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
-import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
 import { ThenaGaugeConnector } from
     "contracts/connectors/thena/ThenaGaugeConnector.sol";
-import { ICLPoolFactory } from
-    "contracts/interfaces/external/aerodrome/ICLPoolFactory.sol";
+
+interface IThenaVoter {
+    function gaugeForPool(
+        address pool
+    ) external view returns (address);
+}
+
+interface IThenaGauge {
+    function TOKEN() external view returns (address);
+}
 
 interface IThenaPairFactory {
     function isPair(
@@ -15,12 +22,12 @@ interface IThenaPairFactory {
 }
 
 contract ThenaGaugeRegistry is ICustomConnectorRegistry {
-    IGaugeRegistryVoter public immutable voter;
+    IThenaVoter public immutable voter;
     IThenaPairFactory public immutable v2PairFactory;
     ThenaGaugeConnector public immutable v2GaugeConnector;
 
     constructor(
-        IGaugeRegistryVoter voter_,
+        IThenaVoter voter_,
         IThenaPairFactory v2PairFactory_,
         ThenaGaugeConnector v2GaugeConnector_
     ) {
@@ -32,15 +39,19 @@ contract ThenaGaugeRegistry is ICustomConnectorRegistry {
     function connectorOf(
         address target
     ) external view override returns (address) {
-        if (voter.isGauge(target)) {
-            address pair = voter.poolForGauge(target);
-            if (v2PairFactory.isPair(pair)) {
-                return address(v2GaugeConnector);
-            } else {
-                return address(0);
-            }
-        } else {
+        (bool success, bytes memory result) =
+            address(target).staticcall(abi.encodeCall(IThenaGauge.TOKEN, ()));
+        if (!success || result.length != 32) {
             return address(0);
         }
+        address pool = abi.decode(result, (address));
+        if (pool == address(0)) {
+            return address(0);
+        }
+        address gauge = voter.gaugeForPool(pool);
+        if (gauge == target && v2PairFactory.isPair(pool)) {
+            return address(v2GaugeConnector);
+        }
+        return address(0);
     }
 }

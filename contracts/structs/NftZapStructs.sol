@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
+import { SwapParams } from "contracts/structs/SwapStructs.sol";
 import {
     NftAddLiquidity,
     NftRemoveLiquidity

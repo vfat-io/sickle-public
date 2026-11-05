@@ -68,7 +68,9 @@ interface IVoter {
         address indexed whitelister, uint256 indexed tokenId, bool indexed _bool
     );
 
-    function pools(uint256 i) external view returns (address);
+    function pools(
+        uint256 i
+    ) external view returns (address);
 
     /// @notice Store trusted forwarder address to pass into factories
     function forwarder() external view returns (address);
@@ -99,19 +101,29 @@ interface IVoter {
 
     // mappings
     /// @dev Pool => Gauge
-    function gauges(address pool) external view returns (address);
+    function gauges(
+        address pool
+    ) external view returns (address);
 
     /// @dev Gauge => Pool
-    function poolForGauge(address gauge) external view returns (address);
+    function poolForGauge(
+        address gauge
+    ) external view returns (address);
 
     /// @dev Gauge => Fees Voting Reward
-    function gaugeToFees(address gauge) external view returns (address);
+    function gaugeToFees(
+        address gauge
+    ) external view returns (address);
 
     /// @dev Gauge => Bribes Voting Reward
-    function gaugeToBribe(address gauge) external view returns (address);
+    function gaugeToBribe(
+        address gauge
+    ) external view returns (address);
 
     /// @dev Pool => Weights
-    function weights(address pool) external view returns (uint256);
+    function weights(
+        address pool
+    ) external view returns (uint256);
 
     /// @dev NFT => Pool => Votes
     function votes(
@@ -120,25 +132,39 @@ interface IVoter {
     ) external view returns (uint256);
 
     /// @dev NFT => Total voting weight of NFT
-    function usedWeights(uint256 tokenId) external view returns (uint256);
+    function usedWeights(
+        uint256 tokenId
+    ) external view returns (uint256);
 
     /// @dev Nft => Timestamp of last vote (ensures single vote per epoch)
-    function lastVoted(uint256 tokenId) external view returns (uint256);
+    function lastVoted(
+        uint256 tokenId
+    ) external view returns (uint256);
 
     /// @dev Address => Gauge
-    function isGauge(address) external view returns (bool);
+    function isGauge(
+        address
+    ) external view returns (bool);
 
     /// @dev Token => Whitelisted status
-    function isWhitelistedToken(address token) external view returns (bool);
+    function isWhitelistedToken(
+        address token
+    ) external view returns (bool);
 
     /// @dev TokenId => Whitelisted status
-    function isWhitelistedNFT(uint256 tokenId) external view returns (bool);
+    function isWhitelistedNFT(
+        uint256 tokenId
+    ) external view returns (bool);
 
     /// @dev Gauge => Liveness status
-    function isAlive(address gauge) external view returns (bool);
+    function isAlive(
+        address gauge
+    ) external view returns (bool);
 
     /// @dev Gauge => Amount claimable
-    function claimable(address gauge) external view returns (uint256);
+    function claimable(
+        address gauge
+    ) external view returns (uint256);
 
     /// @notice Number of pools with a Gauge
     function length() external view returns (uint256);
@@ -149,7 +175,9 @@ interface IVoter {
     /// voting).
     ///      Throws if not called by minter.
     /// @param _amount Amount of rewards to distribute.
-    function notifyRewardAmount(uint256 _amount) external;
+    function notifyRewardAmount(
+        uint256 _amount
+    ) external;
 
     /// @dev Utility to distribute to gauges of pools in range _start to
     /// _finish.
@@ -159,12 +187,16 @@ interface IVoter {
 
     /// @dev Utility to distribute to gauges of pools in array.
     /// @param _gauges Array of gauges to distribute to.
-    function distribute(address[] memory _gauges) external;
+    function distribute(
+        address[] memory _gauges
+    ) external;
 
     /// @notice Called by users to update voting balances in voting rewards
     /// contracts.
     /// @param _tokenId Id of veNFT whose balance you wish to update.
-    function poke(uint256 _tokenId) external;
+    function poke(
+        uint256 _tokenId
+    ) external;
 
     /// @notice Called by users to vote for pools. Votes distributed
     /// proportionally based on weights.
@@ -188,7 +220,9 @@ interface IVoter {
     ///         Cannot reset in the same epoch that you voted in.
     ///         Can vote or deposit into a managed NFT again after reset.
     /// @param _tokenId Id of veNFT you are reseting.
-    function reset(uint256 _tokenId) external;
+    function reset(
+        uint256 _tokenId
+    ) external;
 
     /// @notice Called by users to deposit into a managed NFT.
     ///         Can only vote or deposit into a managed NFT once per epoch.
@@ -206,11 +240,15 @@ interface IVoter {
     ///         Can vote or deposit into a managed NFT again after withdrawing.
     ///         Note that the NFT withdrawn is re-locked to the maximum lock
     /// time.
-    function withdrawManaged(uint256 _tokenId) external;
+    function withdrawManaged(
+        uint256 _tokenId
+    ) external;
 
     /// @notice Claim emissions from gauges.
     /// @param _gauges Array of gauges to collect emissions from.
-    function claimRewards(address[] memory _gauges) external;
+    function claimRewards(
+        address[] memory _gauges
+    ) external;
 
     /// @notice Claim bribes for a given NFT.
     /// @dev Utility to help batch bribe claims.
@@ -237,24 +275,32 @@ interface IVoter {
     /// @notice Set new governor.
     /// @dev Throws if not called by governor.
     /// @param _governor .
-    function setGovernor(address _governor) external;
+    function setGovernor(
+        address _governor
+    ) external;
 
     /// @notice Set new epoch based governor.
     /// @dev Throws if not called by governor.
     /// @param _epochGovernor .
-    function setEpochGovernor(address _epochGovernor) external;
+    function setEpochGovernor(
+        address _epochGovernor
+    ) external;
 
     /// @notice Set new emergency council.
     /// @dev Throws if not called by emergency council.
     /// @param _emergencyCouncil .
-    function setEmergencyCouncil(address _emergencyCouncil) external;
+    function setEmergencyCouncil(
+        address _emergencyCouncil
+    ) external;
 
     /// @notice Set maximum number of gauges that can be voted for.
     /// @dev Throws if not called by governor.
     ///      Throws if _maxVotingNum is too low.
     ///      Throws if the values are the same.
     /// @param _maxVotingNum .
-    function setMaxVotingNum(uint256 _maxVotingNum) external;
+    function setMaxVotingNum(
+        uint256 _maxVotingNum
+    ) external;
 
     /// @notice Whitelist (or unwhitelist) token for use in bribes.
     /// @dev Throws if not called by governor.
@@ -285,18 +331,24 @@ interface IVoter {
     /// @dev Throws if not called by emergency council.
     ///      Throws if gauge already killed.
     /// @param _gauge .
-    function killGauge(address _gauge) external;
+    function killGauge(
+        address _gauge
+    ) external;
 
     /// @notice Revives a killed gauge. Gauge will can receive emissions and
     /// deposits again.
     /// @dev Throws if not called by emergency council.
     ///      Throws if gauge is not killed.
     /// @param _gauge .
-    function reviveGauge(address _gauge) external;
+    function reviveGauge(
+        address _gauge
+    ) external;
 
     /// @dev Update claims to emissions for an array of gauges.
     /// @param _gauges Array of gauges to update emissions for.
-    function updateFor(address[] memory _gauges) external;
+    function updateFor(
+        address[] memory _gauges
+    ) external;
 
     /// @dev Update claims to emissions for gauges based on their pool id as
     /// stored in Voter.
@@ -306,5 +358,7 @@ interface IVoter {
 
     /// @dev Update claims to emissions for single gauge
     /// @param _gauge .
-    function updateFor(address _gauge) external;
+    function updateFor(
+        address _gauge
+    ) external;
 }

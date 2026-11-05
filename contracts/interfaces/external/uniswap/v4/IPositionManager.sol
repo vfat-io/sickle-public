@@ -90,4 +90,21 @@ interface IPositionManager is IImmutableState {
     function ownerOf(
         uint256 tokenId
     ) external view returns (address);
+
+    /// @notice Subscribe a position to a subscriber contract for notifications
+    /// @param tokenId the ERC721 tokenId
+    /// @param subscriber the subscriber contract address
+    /// @param data optional data to pass to the subscriber
+    function subscribe(
+        uint256 tokenId,
+        address subscriber,
+        bytes calldata data
+    ) external;
+
+    /// @notice Check if a position has a subscriber
+    /// @param tokenId the ERC721 tokenId
+    /// @return hasSubscriber true if the position has a subscriber
+    function hasSubscriber(
+        uint256 tokenId
+    ) external view returns (bool);
 }

@@ -7,7 +7,7 @@ import {
     Sickle,
     ConnectorRegistry
 } from "contracts/modules/StrategyModule.sol";
-import { IFarmConnector, Farm } from "contracts/interfaces/IFarmConnector.sol";
+import { IFarmConnector } from "contracts/interfaces/IFarmConnector.sol";
 import {
     Farm,
     DepositParams,
@@ -146,7 +146,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     ) public {
         Sickle sickle = getSickle(msg.sender);
 
-        _compound(sickle, params, sweepTokens);
+        _compound(sickle, params, sweepTokens, FarmStrategyFees.Compound);
 
         emit SickleCompounded(
             sickle,
@@ -378,7 +378,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
                 poolIndex: params.claimFarm.poolIndex
             })
         );
-        _compound(sickle, params, sweepTokens);
+        _compound(sickle, params, sweepTokens, FarmStrategyFees.CompoundFor);
     }
 
     /**
@@ -518,8 +518,8 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
         address[] calldata sweepTokens,
         bytes4 fee
     ) private {
-        address[] memory targets = new address[](4);
-        bytes[] memory data = new bytes[](4);
+        address[] memory targets = new address[](1);
+        bytes[] memory data = new bytes[](1);
 
         targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
@@ -527,11 +527,17 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
             (params.tokensIn, params.amountsIn, strategyAddress, fee)
         );
 
-        targets[1] = address(zapLib);
-        data[1] = abi.encodeCall(IZapLib.zapIn, (params.zap));
+        // Transfer first to keep further actions non-payable
+        sickle.multicall{ value: msg.value }(targets, data);
 
-        targets[2] = connectorRegistry.connectorOf(params.farm.stakingContract);
-        data[2] = abi.encodeCall(
+        targets = new address[](3);
+        data = new bytes[](3);
+
+        targets[0] = address(zapLib);
+        data[0] = abi.encodeCall(IZapLib.zapIn, (params.zap));
+
+        targets[1] = connectorRegistry.connectorOf(params.farm.stakingContract);
+        data[1] = abi.encodeCall(
             IFarmConnector.deposit,
             (
                 params.farm,
@@ -540,11 +546,11 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
             )
         );
 
-        targets[3] = address(transferLib);
-        data[3] =
+        targets[2] = address(transferLib);
+        data[2] =
             abi.encodeCall(ITransferLib.transferTokensToUser, (sweepTokens));
 
-        sickle.multicall{ value: msg.value }(targets, data);
+        sickle.multicall(targets, data);
     }
 
     function _harvest(
@@ -636,7 +642,8 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
     function _compound(
         Sickle sickle,
         CompoundParams calldata params,
-        address[] calldata sweepTokens
+        address[] calldata sweepTokens,
+        bytes4 fee
     ) private {
         address[] memory targets = new address[](5);
         bytes[] memory data = new bytes[](5);
@@ -651,8 +658,7 @@ contract FarmStrategy is StrategyModule, IAutomation, FarmStrategyEvents {
 
         targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            IFeesLib.chargeFees,
-            (strategyAddress, FarmStrategyFees.Compound, params.rewardTokens)
+            IFeesLib.chargeFees, (strategyAddress, fee, params.rewardTokens)
         );
 
         targets[2] = address(zapLib);

@@ -3,10 +3,7 @@ pragma solidity ^0.8.17;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-import {
-    SwapParams,
-    AddLiquidityParams
-} from "contracts/structs/LiquidityStructs.sol";
+import { AddLiquidityParams } from "contracts/structs/LiquidityStructs.sol";
 import { ILiquidityConnector } from
     "contracts/interfaces/ILiquidityConnector.sol";
 import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
@@ -78,7 +75,7 @@ contract ZapLib is DelegateModule, IZapLib {
         address routerConnector =
             connectorRegistry.connectorOf(addLiquidityParams.router);
 
-        _delegateTo(
+        _delegateToConnector(
             routerConnector,
             abi.encodeCall(
                 ILiquidityConnector.addLiquidity, (addLiquidityParams)
@@ -111,7 +108,7 @@ contract ZapLib is DelegateModule, IZapLib {
             }
             address routerConnector =
                 connectorRegistry.connectorOf(zap.removeLiquidityParams.router);
-            _delegateTo(
+            _delegateToConnector(
                 address(routerConnector),
                 abi.encodeCall(
                     ILiquidityConnector.removeLiquidity,

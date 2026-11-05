@@ -42,13 +42,24 @@ abstract contract NonDelegateMulticall {
     function multicall(
         address[] calldata targets,
         bytes[] calldata data
-    ) external payable {
-        if (targets.length != data.length) {
-            revert MulticallParamsMismatchError();
-        }
-
+    ) external payable virtual {
         if (!registry.isWhitelistedCaller(msg.sender)) {
             revert CallerNotWhitelisted(msg.sender);
+        }
+
+        _multicall(targets, data);
+    }
+
+    /// @dev The batching loop itself, callable without going back out through
+    /// the external entrypoint and its caller-whitelist lookup. Inheritors
+    /// that only batch their own work should use this and keep the external
+    /// surface closed.
+    function _multicall(
+        address[] memory targets,
+        bytes[] memory data
+    ) internal {
+        if (targets.length != data.length) {
+            revert MulticallParamsMismatchError();
         }
 
         for (uint256 i = 0; i != data.length;) {

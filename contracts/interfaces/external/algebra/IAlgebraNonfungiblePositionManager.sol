@@ -253,7 +253,10 @@ interface IAlgebraNonfungiblePositionManager {
     /// @dev can be called only by farmingCenter
     /// @param tokenId The ID of the token
     /// @param toActive The new status
-    function switchFarmingStatus(uint256 tokenId, bool toActive) external;
+    function switchFarmingStatus(
+        uint256 tokenId,
+        bool toActive
+    ) external;
 
     /// @notice Changes address of farmingCenter
     /// @dev can be called only by factory owner or
@@ -274,6 +277,8 @@ interface IAlgebraNonfungiblePositionManager {
     /// @return The address of the farming center contract, which handles
     /// farmings logic
     function farmingCenter() external view returns (address);
+
+    function factory() external view returns (address);
 
     /// @notice Returns the address of farming that is approved for this token,
     /// if any

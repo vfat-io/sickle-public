@@ -27,7 +27,7 @@ contract MorphoConnector is ILendingConnector {
         address target,
         uint256 amount,
         bytes memory extraData
-    ) external payable override {
+    ) external override {
         MorphoExtraData memory data = abi.decode(extraData, (MorphoExtraData));
         SafeTransferLib.safeApprove(
             data.marketParams.collateralToken, target, amount
@@ -67,7 +67,7 @@ contract MorphoConnector is ILendingConnector {
         address target,
         uint256 amount,
         bytes memory extraData
-    ) external payable override {
+    ) external override {
         MorphoExtraData memory data = abi.decode(extraData, (MorphoExtraData));
         IMorpho(target).borrow(
             data.marketParams, amount, 0, address(this), address(this)
@@ -78,7 +78,7 @@ contract MorphoConnector is ILendingConnector {
         address target,
         uint256 amount,
         bytes memory extraData
-    ) external payable override {
+    ) external override {
         MorphoExtraData memory data = abi.decode(extraData, (MorphoExtraData));
         SafeTransferLib.safeApprove(data.marketParams.loanToken, target, amount);
         IMorpho(target).repay(
@@ -92,7 +92,7 @@ contract MorphoConnector is ILendingConnector {
         address borrower,
         uint256 amount,
         bytes memory extraData
-    ) external payable override {
+    ) external override {
         MorphoExtraData memory data = abi.decode(extraData, (MorphoExtraData));
         if (amount == 0) {
             // Repay all

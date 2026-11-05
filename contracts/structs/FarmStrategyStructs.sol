@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { ZapIn, ZapOut } from "contracts/libraries/ZapLib.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
+import { ZapIn, ZapOut } from "contracts/structs/ZapStructs.sol";
+import { SwapParams } from "contracts/structs/SwapStructs.sol";
 
 struct Farm {
     address stakingContract;

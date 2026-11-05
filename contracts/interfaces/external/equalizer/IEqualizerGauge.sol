@@ -51,18 +51,26 @@ interface IEqualizerGauge {
     function totalSupply() external view returns (uint256);
 
     /// @notice Get the amount of stakingToken deposited by an account
-    function balanceOf(address) external view returns (uint256);
+    function balanceOf(
+        address
+    ) external view returns (uint256);
 
     /// @notice Cached rewardPerTokenStored for an account based on their most
     /// recent action
-    function userRewardPerTokenPaid(address) external view returns (uint256);
+    function userRewardPerTokenPaid(
+        address
+    ) external view returns (uint256);
 
     /// @notice Cached amount of rewardToken earned for an account
-    function rewards(address) external view returns (uint256);
+    function rewards(
+        address
+    ) external view returns (uint256);
 
     /// @notice View to see the rewardRate given the timestamp of the start of
     /// the epoch
-    function rewardRateByEpoch(uint256) external view returns (uint256);
+    function rewardRateByEpoch(
+        uint256
+    ) external view returns (uint256);
 
     /// @notice Cached amount of fees generated from the Pool linked to the
     /// Gauge of token0
@@ -97,7 +105,9 @@ interface IEqualizerGauge {
 
     /// @notice Deposit LP tokens into gauge for msg.sender
     /// @param _amount .
-    function deposit(uint256 _amount) external;
+    function deposit(
+        uint256 _amount
+    ) external;
 
     /// @notice Deposit LP tokens into gauge for any user
     /// @param _amount .
@@ -106,15 +116,21 @@ interface IEqualizerGauge {
 
     /// @notice Withdraw LP tokens for user
     /// @param _amount .
-    function withdraw(uint256 _amount) external;
+    function withdraw(
+        uint256 _amount
+    ) external;
 
     /// @dev Notifies gauge of gauge rewards. Assumes gauge reward tokens is 18
     /// decimals.
     ///      If not 18 decimals, rewardRate may have rounding issues.
-    function notifyRewardAmount(uint256 amount) external;
+    function notifyRewardAmount(
+        uint256 amount
+    ) external;
 
     /// @dev Notifies gauge of gauge rewards without distributing its fees.
     ///      Assumes gauge reward tokens is 18 decimals.
     ///      If not 18 decimals, rewardRate may have rounding issues.
-    function notifyRewardWithoutClaim(uint256 amount) external;
+    function notifyRewardWithoutClaim(
+        uint256 amount
+    ) external;
 }

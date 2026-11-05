@@ -7,7 +7,7 @@ import {
     NftPosition,
     SimpleNftHarvest
 } from "contracts/structs/NftFarmStrategyStructs.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
+import { SwapParams } from "contracts/structs/SwapStructs.sol";
 import { NftZapIn } from "contracts/structs/NftZapStructs.sol";
 
 struct ClaimParams {

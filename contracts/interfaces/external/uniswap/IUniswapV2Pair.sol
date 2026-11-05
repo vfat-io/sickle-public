@@ -15,7 +15,9 @@ interface IUniswapV2Pair {
 
     function totalSupply() external view returns (uint256);
 
-    function balanceOf(address owner) external view returns (uint256);
+    function balanceOf(
+        address owner
+    ) external view returns (uint256);
 
     function allowance(
         address owner,
@@ -36,7 +38,9 @@ interface IUniswapV2Pair {
 
     function PERMIT_TYPEHASH() external pure returns (bytes32);
 
-    function nonces(address owner) external view returns (uint256);
+    function nonces(
+        address owner
+    ) external view returns (uint256);
 
     function permit(
         address owner,
@@ -84,11 +88,13 @@ interface IUniswapV2Pair {
 
     function kLast() external view returns (uint256);
 
-    function mint(address to) external returns (uint256 liquidity);
+    function mint(
+        address to
+    ) external returns (uint256 liquidity);
 
-    function burn(address to)
-        external
-        returns (uint256 amount0, uint256 amount1);
+    function burn(
+        address to
+    ) external returns (uint256 amount0, uint256 amount1);
 
     function swap(
         uint256 amount0Out,
@@ -97,7 +103,9 @@ interface IUniswapV2Pair {
         bytes calldata data
     ) external;
 
-    function skim(address to) external;
+    function skim(
+        address to
+    ) external;
 
     function sync() external;
 

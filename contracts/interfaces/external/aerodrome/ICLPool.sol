@@ -360,6 +360,8 @@ interface ICLPool {
 
     function liquidity() external view returns (uint128);
 
+    function stakedLiquidity() external view returns (uint128);
+
     function feeGrowthGlobal0X128() external view returns (uint256);
 
     function feeGrowthGlobal1X128() external view returns (uint256);

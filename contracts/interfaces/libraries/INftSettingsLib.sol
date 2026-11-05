@@ -6,9 +6,10 @@ import { INonfungiblePositionManager } from
 
 import {
     INftSettingsRegistry,
-    NftSettings,
-    NftKey
+    NftSettings
 } from "contracts/interfaces/INftSettingsRegistry.sol";
+import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
+import { IShiftMath } from "contracts/interfaces/libraries/IShiftMath.sol";
 
 interface INftSettingsLib {
     error InvalidTokenId();
@@ -16,7 +17,9 @@ interface INftSettingsLib {
     function transferNftSettings(
         INftSettingsRegistry nftSettingsRegistry,
         INonfungiblePositionManager nftManager,
-        uint256 tokenId
+        uint256 tokenId,
+        IShiftMath shiftMath,
+        ConnectorRegistry connectorRegistry
     ) external;
 
     function setNftSettings(

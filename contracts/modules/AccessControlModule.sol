@@ -19,7 +19,7 @@ contract AccessControlModule {
     }
 
     modifier onlyRegisteredSickle() {
-        if (factory.owners(address(this)) == address(0)) {
+        if (factory.admins(address(this)) == address(0)) {
             revert NotRegisteredSickle();
         }
 
@@ -33,12 +33,26 @@ contract AccessControlModule {
     ) {
         // Here we check if the Sickle was really deployed, this gives use the
         // guarantee that the contract that we are going to call is genuine
-        if (factory.owners(address(sickle)) == address(0)) {
+        if (factory.admins(address(sickle)) == address(0)) {
             revert SickleNotDeployed();
         }
 
         if (sickle.approved() != msg.sender) revert NotApproved();
 
         _;
+    }
+
+    /// @dev Same check as `onlyApproved`, as a function. A modifier body is
+    /// inlined at every use; a strategy near the EIP-170 limit with several
+    /// `*For` entrypoints can wrap this in a one-line modifier instead and
+    /// pay one copy. Kept separate from `onlyApproved` so strategies that
+    /// keep using the modifier do not change bytecode.
+    function _requireApproved(
+        Sickle sickle
+    ) internal view {
+        if (factory.admins(address(sickle)) == address(0)) {
+            revert SickleNotDeployed();
+        }
+        if (sickle.approved() != msg.sender) revert NotApproved();
     }
 }

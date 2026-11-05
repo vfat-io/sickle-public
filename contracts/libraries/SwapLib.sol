@@ -5,10 +5,9 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { DelegateModule } from "contracts/modules/DelegateModule.sol";
 import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
-import { ILiquidityConnector } from
-    "contracts/interfaces/ILiquidityConnector.sol";
+import { ISwapConnector } from "contracts/interfaces/ISwapConnector.sol";
+import { SwapParams } from "contracts/structs/SwapStructs.sol";
 import { ISwapLib } from "contracts/interfaces/libraries/ISwapLib.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
 
 address constant UNISWAP_ETH = 0x0000000000000000000000000000000000000000;
 
@@ -62,27 +61,37 @@ contract SwapLib is DelegateModule, ISwapLib {
 
         if (!isNative) {
             // In case there is USDT dust approval, revoke it
-            SafeTransferLib.safeApprove(tokenIn, swapParams.router, 0);
+            SafeTransferLib.safeApprove(tokenIn, swapParams.tokenApproval, 0);
             SafeTransferLib.safeApprove(
-                tokenIn, swapParams.router, swapParams.amountIn
+                tokenIn, swapParams.tokenApproval, swapParams.amountIn
             );
         }
 
         address connectorAddress =
             connectorRegistry.connectorOf(swapParams.router);
 
-        ILiquidityConnector routerConnector =
-            ILiquidityConnector(connectorAddress);
+        ISwapConnector swapConnector = ISwapConnector(connectorAddress);
 
-        _delegateTo(
-            address(routerConnector),
-            abi.encodeCall(routerConnector.swapExactTokensForTokens, swapParams)
-        );
+        if (!isNative) {
+            _delegateToConnector(
+                address(swapConnector),
+                abi.encodeCall(
+                    swapConnector.swapExactTokensForTokens, (swapParams)
+                )
+            );
+        } else {
+            _delegateToConnector(
+                address(swapConnector),
+                abi.encodeCall(
+                    swapConnector.swapExactETHForTokens, (swapParams)
+                )
+            );
+        }
 
         if (!isNative) {
             // Revoke any approval after swap in case the swap amount was
             // estimated
-            SafeTransferLib.safeApprove(tokenIn, swapParams.router, 0);
+            SafeTransferLib.safeApprove(tokenIn, swapParams.tokenApproval, 0);
         }
     }
 }

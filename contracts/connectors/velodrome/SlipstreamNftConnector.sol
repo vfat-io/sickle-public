@@ -2,19 +2,14 @@
 pragma solidity ^0.8.0;
 
 import {
-    INftLiquidityConnector,
     NftAddLiquidity,
-    NftRemoveLiquidity,
-    SwapParams,
-    NftPositionInfo,
     NftPoolInfo,
     NftPoolKey
 } from "contracts/interfaces/INftLiquidityConnector.sol";
-import
+import { ISlipstreamNonfungiblePositionManager } from
     "contracts/interfaces/external/aerodrome/ISlipstreamNonfungiblePositionManager.sol";
-import { UniswapV3Connector } from "contracts/connectors/UniswapV3Connector.sol";
-import { IUniswapV3Pool } from
-    "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
+import { UniswapV3Connector } from
+    "contracts/connectors/uniswap/UniswapV3Connector.sol";
 import { ICLPool } from "contracts/interfaces/external/aerodrome/ICLPool.sol";
 import { ICLPoolFactory } from
     "contracts/interfaces/external/aerodrome/ICLPoolFactory.sol";
@@ -25,12 +20,6 @@ struct SlipstreamAddLiquidityExtraData {
 
 contract SlipstreamNftConnector is UniswapV3Connector {
     error Unsupported();
-
-    function swapExactTokensForTokens(
-        SwapParams memory
-    ) external payable override {
-        revert Unsupported();
-    }
 
     function _mint(
         NftAddLiquidity memory addLiquidityParams
@@ -77,12 +66,11 @@ contract SlipstreamNftConnector is UniswapV3Connector {
         });
     }
 
-    function feeGrowthOutside(
+    function _get_fee_growth_outside_tick(
         address pool,
-        bytes32, // poolId
         int24 tick_
     )
-        external
+        internal
         view
         virtual
         override
@@ -90,6 +78,12 @@ contract SlipstreamNftConnector is UniswapV3Connector {
     {
         (,,, feeGrowthOutside0X128, feeGrowthOutside1X128,,,,,) =
             ICLPool(pool).ticks(tick_);
+    }
+
+    function _get_current_tick(
+        address pool
+    ) internal view virtual override returns (int24 tickCurrent) {
+        (, tickCurrent,,,,) = ICLPool(pool).slot0();
     }
 
     function positionPoolKey(
@@ -107,16 +101,17 @@ contract SlipstreamNftConnector is UniswapV3Connector {
          });
     }
 
-    function positionInfo(
+    function positionLiquidity(
         address nftManager,
         uint256 tokenId
-    ) public view virtual override returns (NftPositionInfo memory) {
-        (,,,,, int24 tickLower, int24 tickUpper, uint128 liquidity,,,,) =
+    )
+        public
+        view
+        virtual
+        override
+        returns (int24 tickLower, int24 tickUpper, uint128 liquidity)
+    {
+        (,,,,, tickLower, tickUpper, liquidity,,,,) =
             ISlipstreamNonfungiblePositionManager(nftManager).positions(tokenId);
-        return NftPositionInfo({
-            liquidity: liquidity,
-            tickLower: tickLower,
-            tickUpper: tickUpper
-        });
     }
 }

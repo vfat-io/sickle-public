@@ -13,7 +13,7 @@ contract NuriGaugeConnector is RamsesGaugeConnector {
         Farm calldata farm,
         address token,
         bytes memory // _extraData
-    ) external payable override {
+    ) external override {
         uint256 amount = IERC20(token).balanceOf(address(this));
         SafeTransferLib.safeApprove(token, farm.stakingContract, amount);
         INuriGauge(farm.stakingContract).deposit(amount);

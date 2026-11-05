@@ -44,7 +44,9 @@ interface IUniswapV3Factory {
     /// @param fee The enabled fee, denominated in hundredths of a bip. Returns
     /// 0 in case of unenabled fee
     /// @return The tick spacing
-    function feeAmountTickSpacing(uint24 fee) external view returns (int24);
+    function feeAmountTickSpacing(
+        uint24 fee
+    ) external view returns (int24);
 
     /// @notice Returns the pool address for a given pair of tokens and a fee,
     /// or address 0 if it does not exist
@@ -80,7 +82,9 @@ interface IUniswapV3Factory {
     /// @notice Updates the owner of the factory
     /// @dev Must be called by the current owner
     /// @param _owner The new owner of the factory
-    function setOwner(address _owner) external;
+    function setOwner(
+        address _owner
+    ) external;
 
     /// @notice Enables a fee amount with the given tickSpacing
     /// @dev Fee amounts may never be removed once enabled

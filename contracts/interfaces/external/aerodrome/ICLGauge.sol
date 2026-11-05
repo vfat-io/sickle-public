@@ -39,14 +39,20 @@ interface ICLGauge {
     function rewardRate() external view returns (uint256);
 
     /// @notice Claimable rewards by tokenId
-    function rewards(uint256 tokenId) external view returns (uint256);
+    function rewards(
+        uint256 tokenId
+    ) external view returns (uint256);
 
     /// @notice Most recent timestamp tokenId called updateRewards
-    function lastUpdateTime(uint256 tokenId) external view returns (uint256);
+    function lastUpdateTime(
+        uint256 tokenId
+    ) external view returns (uint256);
 
     /// @notice View to see the rewardRate given the timestamp of the start of
     /// the epoch
-    function rewardRateByEpoch(uint256) external view returns (uint256);
+    function rewardRateByEpoch(
+        uint256
+    ) external view returns (uint256);
 
     /// @notice Cached amount of fees generated from the Pool linked to the
     /// Gauge of token0
@@ -79,10 +85,9 @@ interface ICLGauge {
     /// action (deposit, withdraw, getReward)
     /// @param tokenId The tokenId of the position
     /// @return The rewardGrowthInside for the position
-    function rewardGrowthInside(uint256 tokenId)
-        external
-        view
-        returns (uint256);
+    function rewardGrowthInside(
+        uint256 tokenId
+    ) external view returns (uint256);
 
     /// @notice Called on gauge creation by CLGaugeFactory
     /// @param _pool The address of the pool
@@ -121,35 +126,47 @@ interface ICLGauge {
     /// @notice Retrieve rewards for all tokens owned by an account
     /// @dev Throws if not called by the voter
     /// @param account The account of the user
-    function getReward(address account) external;
+    function getReward(
+        address account
+    ) external;
 
     /// @notice Retrieve rewards for a tokenId
     /// @dev Throws if not called by the position owner
     /// @param tokenId The tokenId of the position
-    function getReward(uint256 tokenId) external;
+    function getReward(
+        uint256 tokenId
+    ) external;
 
     /// @notice Notifies gauge of gauge rewards.
     /// @param amount Amount of gauge rewards (emissions) to notify. Must be
     /// greater than 604_800.
-    function notifyRewardAmount(uint256 amount) external;
+    function notifyRewardAmount(
+        uint256 amount
+    ) external;
 
     /// @dev Notifies gauge of gauge rewards without distributing its fees.
     ///      Assumes gauge reward tokens is 18 decimals.
     ///      If not 18 decimals, rewardRate may have rounding issues.
     /// @param amount Amount of gauge rewards (emissions) to notify. Must be
     /// greater than 604_800.
-    function notifyRewardWithoutClaim(uint256 amount) external;
+    function notifyRewardWithoutClaim(
+        uint256 amount
+    ) external;
 
     /// @notice Used to deposit a CL position into the gauge
     /// @notice Allows the user to receive emissions instead of fees
     /// @param tokenId The tokenId of the position
-    function deposit(uint256 tokenId) external;
+    function deposit(
+        uint256 tokenId
+    ) external;
 
     /// @notice Used to withdraw a CL position from the gauge
     /// @notice Allows the user to receive fees instead of emissions
     /// @notice Outstanding emissions will be collected on withdrawal
     /// @param tokenId The tokenId of the position
-    function withdraw(uint256 tokenId) external;
+    function withdraw(
+        uint256 tokenId
+    ) external;
 
     /// @notice Used to increase liquidity of a staked position
     /// @param tokenId The tokenId of the position
@@ -197,10 +214,9 @@ interface ICLGauge {
     /// @notice Fetch all tokenIds staked by a given account
     /// @param depositor The address of the user
     /// @return The tokenIds of the staked positions
-    function stakedValues(address depositor)
-        external
-        view
-        returns (uint256[] memory);
+    function stakedValues(
+        address depositor
+    ) external view returns (uint256[] memory);
 
     /// @notice Fetch a staked tokenId by index
     /// @param depositor The address of the user
@@ -224,5 +240,7 @@ interface ICLGauge {
     /// @notice The amount of positions staked in the gauge by a certain user
     /// @param depositor The address of the user
     /// @return The amount of positions staked in the gauge
-    function stakedLength(address depositor) external view returns (uint256);
+    function stakedLength(
+        address depositor
+    ) external view returns (uint256);
 }

@@ -134,7 +134,7 @@ contract TransferLib is MsgValueModule, DelegateModule, ITransferLib {
         bytes memory result = _delegateTo(
             address(feesLib),
             abi.encodeCall(
-                IFeesLib.chargeFee, (strategy, feeSelector, tokenIn, 0)
+                IFeesLib.chargeFee, (strategy, feeSelector, tokenIn, amountIn)
             )
         );
         uint256 remainder = abi.decode(result, (uint256));

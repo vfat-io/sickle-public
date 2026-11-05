@@ -8,7 +8,9 @@ import { FlashloanStrategy } from "contracts/strategies/FlashloanStrategy.sol";
 abstract contract FlashloanInitiator is LendingStructs {
     error ArrayLengthMismatch();
 
-    modifier flashloanParamCheck(FlashloanParams calldata flashloanParams) {
+    modifier flashloanParamCheck(
+        FlashloanParams calldata flashloanParams
+    ) {
         if (
             flashloanParams.flashloanAssets.length
                 != flashloanParams.flashloanAmounts.length
@@ -20,7 +22,9 @@ abstract contract FlashloanInitiator is LendingStructs {
 
     FlashloanStrategy public immutable flashloanStrategy;
 
-    constructor(FlashloanStrategy flashloanStrategy_) {
+    constructor(
+        FlashloanStrategy flashloanStrategy_
+    ) {
         flashloanStrategy = flashloanStrategy_;
     }
 

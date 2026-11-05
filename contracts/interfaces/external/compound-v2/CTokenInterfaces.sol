@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity ^0.8.10;
 
-import { ComptrollerInterface } from
-    "contracts/interfaces/external/compound-v2/ComptrollerInterface.sol";
-import { InterestRateModel } from
-    "contracts/interfaces/external/compound-v2/InterestRateModel.sol";
-import { EIP20NonStandardInterface } from
-    "contracts/interfaces/external/compound-v2/EIP20NonStandardInterface.sol";
+import {
+    ComptrollerInterface
+} from "contracts/interfaces/external/compound-v2/ComptrollerInterface.sol";
+import {
+    InterestRateModel
+} from "contracts/interfaces/external/compound-v2/InterestRateModel.sol";
+import {
+    EIP20NonStandardInterface
+} from "contracts/interfaces/external/compound-v2/EIP20NonStandardInterface.sol";
 
 contract CTokenStorage {
     /**
@@ -97,13 +100,6 @@ contract CTokenStorage {
     // Approved token transfer amounts on behalf of others
     mapping(address => mapping(address => uint256)) internal transferAllowances;
 
-    /**
-     * @notice Container for borrow balance information
-     * @member principal Total balance (with accrued interest), after applying
-     * the most recent balance-changing action
-     * @member interestIndex Global borrowIndex as of the most recent
-     * balance-changing action
-     */
     struct BorrowSnapshot {
         uint256 principal;
         uint256 interestIndex;
@@ -279,18 +275,17 @@ abstract contract CTokenInterface is CTokenStorage {
         address spender
     ) external view virtual returns (uint256);
 
-    function balanceOf(address owner) external view virtual returns (uint256);
+    function balanceOf(
+        address owner
+    ) external view virtual returns (uint256);
 
-    function balanceOfUnderlying(address owner)
-        external
-        virtual
-        returns (uint256);
+    function balanceOfUnderlying(
+        address owner
+    ) external virtual returns (uint256);
 
-    function getAccountSnapshot(address account)
-        external
-        view
-        virtual
-        returns (uint256, uint256, uint256, uint256);
+    function getAccountSnapshot(
+        address account
+    ) external view virtual returns (uint256, uint256, uint256, uint256);
 
     function borrowRatePerBlock() external view virtual returns (uint256);
 
@@ -298,16 +293,13 @@ abstract contract CTokenInterface is CTokenStorage {
 
     function totalBorrowsCurrent() external virtual returns (uint256);
 
-    function borrowBalanceCurrent(address account)
-        external
-        virtual
-        returns (uint256);
+    function borrowBalanceCurrent(
+        address account
+    ) external virtual returns (uint256);
 
-    function borrowBalanceStored(address account)
-        external
-        view
-        virtual
-        returns (uint256);
+    function borrowBalanceStored(
+        address account
+    ) external view virtual returns (uint256);
 
     function exchangeRateCurrent() external virtual returns (uint256);
 
@@ -326,32 +318,27 @@ abstract contract CTokenInterface is CTokenStorage {
     /**
      * Admin Functions **
      */
-    function _setPendingAdmin(address payable newPendingAdmin)
-        external
-        virtual
-        returns (uint256);
+    function _setPendingAdmin(
+        address payable newPendingAdmin
+    ) external virtual returns (uint256);
 
     function _acceptAdmin() external virtual returns (uint256);
 
-    function _setComptroller(ComptrollerInterface newComptroller)
-        external
-        virtual
-        returns (uint256);
+    function _setComptroller(
+        ComptrollerInterface newComptroller
+    ) external virtual returns (uint256);
 
-    function _setReserveFactor(uint256 newReserveFactorMantissa)
-        external
-        virtual
-        returns (uint256);
+    function _setReserveFactor(
+        uint256 newReserveFactorMantissa
+    ) external virtual returns (uint256);
 
-    function _reduceReserves(uint256 reduceAmount)
-        external
-        virtual
-        returns (uint256);
+    function _reduceReserves(
+        uint256 reduceAmount
+    ) external virtual returns (uint256);
 
-    function _setInterestRateModel(InterestRateModel newInterestRateModel)
-        external
-        virtual
-        returns (uint256);
+    function _setInterestRateModel(
+        InterestRateModel newInterestRateModel
+    ) external virtual returns (uint256);
 }
 
 contract CErc20Storage {
@@ -365,21 +352,25 @@ abstract contract CErc20Interface is CErc20Storage {
     /**
      * User Interface **
      */
-    function mint(uint256 mintAmount) external virtual returns (uint256);
+    function mint(
+        uint256 mintAmount
+    ) external virtual returns (uint256);
 
-    function redeem(uint256 redeemTokens) external virtual returns (uint256);
+    function redeem(
+        uint256 redeemTokens
+    ) external virtual returns (uint256);
 
-    function redeemUnderlying(uint256 redeemAmount)
-        external
-        virtual
-        returns (uint256);
+    function redeemUnderlying(
+        uint256 redeemAmount
+    ) external virtual returns (uint256);
 
-    function borrow(uint256 borrowAmount) external virtual returns (uint256);
+    function borrow(
+        uint256 borrowAmount
+    ) external virtual returns (uint256);
 
-    function repayBorrow(uint256 repayAmount)
-        external
-        virtual
-        returns (uint256);
+    function repayBorrow(
+        uint256 repayAmount
+    ) external virtual returns (uint256);
 
     function repayBorrowBehalf(
         address borrower,
@@ -392,15 +383,16 @@ abstract contract CErc20Interface is CErc20Storage {
         CTokenInterface cTokenCollateral
     ) external virtual returns (uint256);
 
-    function sweepToken(EIP20NonStandardInterface token) external virtual;
+    function sweepToken(
+        EIP20NonStandardInterface token
+    ) external virtual;
 
     /**
      * Admin Functions **
      */
-    function _addReserves(uint256 addAmount)
-        external
-        virtual
-        returns (uint256);
+    function _addReserves(
+        uint256 addAmount
+    ) external virtual returns (uint256);
 }
 
 contract CDelegationStorage {
@@ -440,7 +432,9 @@ abstract contract CDelegateInterface is CDelegationStorage {
      * @dev Should revert if any issues arise which make it unfit for delegation
      * @param data The encoded bytes data for any initialization
      */
-    function _becomeImplementation(bytes memory data) external virtual;
+    function _becomeImplementation(
+        bytes memory data
+    ) external virtual;
 
     /**
      * @notice Called by the delegator on a delegate to forfeit its

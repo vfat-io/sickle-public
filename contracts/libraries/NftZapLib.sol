@@ -85,7 +85,7 @@ contract NftZapLib is DelegateModule, INftZapLib {
         address routerConnector =
             connectorRegistry.connectorOf(address(addLiquidityParams.nft));
 
-        _delegateTo(
+        _delegateToConnector(
             routerConnector,
             abi.encodeCall(
                 INftLiquidityConnector.addLiquidity, (addLiquidityParams)
@@ -111,7 +111,7 @@ contract NftZapLib is DelegateModule, INftZapLib {
             address(zap.removeLiquidityParams.nft)
         );
 
-        _delegateTo(
+        _delegateToConnector(
             routerConnector,
             abi.encodeCall(
                 INftLiquidityConnector.removeLiquidity,

@@ -7,6 +7,7 @@ import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
 import { BPS_BASIS } from "contracts/base/Constants.sol";
 import { Admin } from "contracts/base/Admin.sol";
+import { TimelockAdmin } from "contracts/base/TimelockAdmin.sol";
 import { ILendingPoolV2 } from
     "contracts/interfaces/external/flashloans/ILendingPoolV2.sol";
 import { IPoolV3 } from "contracts/interfaces/external/flashloans/IPoolV3.sol";
@@ -34,7 +35,7 @@ library FlashloanStrategyEvents {
 /// @author vfat.tools
 /// @notice Manages approved flashloan providers for the sickle and calls to and
 /// from flashloan providers
-contract FlashloanStrategy is Admin, IFlashLoanRecipient {
+contract FlashloanStrategy is Admin, TimelockAdmin, IFlashLoanRecipient {
     /// ENUMS ///
 
     enum FlashloanStatus {
@@ -80,6 +81,9 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
     /// flashloan operation
     error SelectorAlreadyLinked();
 
+    /// @notice Thrown when trying to update a selector that was never linked
+    error SelectorNotLinked();
+
     /// STORAGE ///
 
     // Contract addresses
@@ -106,12 +110,15 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
     /// WRITE FUNCTIONS ///
 
     /// @param admin_ Address of the admin
+    /// @param timelockAdmin_ Address of the timelock admin, which is the only
+    /// caller able to re-point an already-linked selector
     /// @param whitelistedOpsSelectors_ Array of flashloan operation types to
     /// whitelist
     /// @param correspondingStrategies_ Array of strategy addresses where
     /// flashloan operations will be executed
     constructor(
         address admin_,
+        address timelockAdmin_,
         SickleFactory sickleFactory_,
         address aaveV2LendingPool_,
         address aaveV3LendingPool_,
@@ -121,7 +128,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         address morpho_,
         bytes4[] memory whitelistedOpsSelectors_,
         address[] memory correspondingStrategies_
-    ) Admin(admin_) {
+    ) Admin(admin_) TimelockAdmin(timelockAdmin_) {
         sickleFactory = sickleFactory_;
         aaveV2LendingPool = aaveV2LendingPool_;
         aaveV3LendingPool = aaveV3LendingPool_;
@@ -151,6 +158,48 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         _setWhitelistedFlashloanOpsSelectors(
             whitelistedOpsSelectors, correspondingStrategies
         );
+    }
+
+    /// @notice Re-points flashloan operation types that are already linked
+    /// @dev The linked address is delegatecalled from the sickle, so
+    /// re-pointing one is a privileged action and is timelocked, while
+    /// `setWhitelistedFlashloanOpsSelectors` only ever fills empty slots.
+    /// Mirrors ConnectorRegistry.setConnectors / updateConnectors. Passing
+    /// address(0) unlinks a selector, after which the operation reverts
+    /// UnauthorizedOperation until it is linked again.
+    /// @param whitelistedOpsSelectors Array of flashloan operation types to
+    /// re-point
+    /// @param correspondingStrategies Array of strategy addresses where
+    /// flashloan operations will be executed
+    /// @custom:access Restricted to the timelock admin.
+    function updateWhitelistedFlashloanOpsSelectors(
+        bytes4[] memory whitelistedOpsSelectors,
+        address[] memory correspondingStrategies
+    ) external onlyTimelockAdmin {
+        if (whitelistedOpsSelectors.length != correspondingStrategies.length) {
+            revert ParamsMismatch();
+        }
+
+        uint256 length = whitelistedOpsSelectors.length;
+        for (uint256 i; i < length;) {
+            if (
+                whitelistedFlashloanOpsRegistry[whitelistedOpsSelectors[i]]
+                    == address(0)
+            ) {
+                revert SelectorNotLinked();
+            }
+
+            whitelistedFlashloanOpsRegistry[whitelistedOpsSelectors[i]] =
+                correspondingStrategies[i];
+
+            emit FlashloanStrategyEvents.SelectorLinked(
+                whitelistedOpsSelectors[i], correspondingStrategies[i]
+            );
+
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     function _setWhitelistedFlashloanOpsSelectors(
@@ -674,7 +723,7 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
             uint256 length = amounts.length;
             for (uint256 i; i < length;) {
                 if (amounts[i] > 0) {
-                    premiums[i] = ((amounts[i] * 3) / 997) + 1;
+                    premiums[i] = ((amounts[i] * 3 - 1) / 997) + 1;
                 }
 
                 unchecked {
@@ -684,10 +733,10 @@ contract FlashloanStrategy is Admin, IFlashLoanRecipient {
         } else if (providerType == FlashloanProvider.UNIV3) {
             uint256 length = amounts.length;
             for (uint256 i; i < length;) {
-                if (amounts[i] > 0) {
+                if (amounts[i] > 0 && providerFee > 0) {
                     premiums[i] =
-                        ((amounts[i] * providerFee) / BPS_BASIS / 100) + 1; // hundredths
-                        // of basis points
+                        ((amounts[i] * providerFee - 1) / BPS_BASIS / 100) + 1;
+                    // hundredths of basis points
                 }
 
                 unchecked {

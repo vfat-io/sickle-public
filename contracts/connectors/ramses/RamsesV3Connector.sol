@@ -1,25 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
-import {
-    INftFarmConnector,
-    Farm,
-    NftPosition
-} from "contracts/interfaces/INftFarmConnector.sol";
-import
+import { NftPosition } from "contracts/interfaces/INftFarmConnector.sol";
+import { IRamsesNonfungiblePositionManager } from
     "contracts/interfaces/external/ramses/IRamsesNonfungiblePositionManager.sol";
 import { IRamsesV2Pool } from
     "contracts/interfaces/external/ramses/IRamsesV2Pool.sol";
-import { ISwapRouter } from
-    "contracts/interfaces/external/uniswap/ISwapRouter.sol";
 import {
     UniswapV3Connector,
     NftAddLiquidity
-} from "contracts/connectors/UniswapV3Connector.sol";
-import { INonfungiblePositionManager } from
-    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
+} from "contracts/connectors/uniswap/UniswapV3Connector.sol";
 import { IVoter } from "contracts/interfaces/external/aerodrome/IVoter.sol";
 import { IUniswapV3Factory } from
     "contracts/interfaces/external/uniswap/IUniswapV3Factory.sol";
@@ -31,37 +21,27 @@ struct RamsesV3SwapExtraData {
     bytes path;
 }
 
+struct RamsesV3ClaimExtraData {
+    bool isPool;
+}
+
 contract RamsesV3Connector is UniswapV3Connector {
-    function swapExactTokensForTokens(
-        SwapParams memory swap
-    ) external payable override {
-        RamsesV3SwapExtraData memory extraData =
-            abi.decode(swap.extraData, (RamsesV3SwapExtraData));
-
-        IERC20(swap.tokenIn).approve(extraData.pool, swap.amountIn);
-
-        ISwapRouter.ExactInputParams memory params = ISwapRouter
-            .ExactInputParams({
-            path: extraData.path,
-            recipient: address(this),
-            deadline: block.timestamp,
-            amountIn: swap.amountIn,
-            amountOutMinimum: swap.minAmountOut
-        });
-
-        ISwapRouter(swap.router).exactInput(params);
-    }
-
     function claim(
         NftPosition calldata position,
         address[] memory rewardTokens,
         uint128 amount0Max,
         uint128 amount1Max,
-        bytes calldata // extraData
-    ) external payable override {
-        IRamsesNonfungiblePositionManager(address(position.nft)).getReward(
-            position.tokenId, rewardTokens
-        );
+        bytes calldata extraData
+    ) external override {
+        bool isPool = false;
+        if (extraData.length == 32) {
+            isPool = abi.decode(extraData, (RamsesV3ClaimExtraData)).isPool;
+        }
+        if (!isPool) {
+            IRamsesNonfungiblePositionManager(address(position.nft)).getReward(
+                position.tokenId, rewardTokens
+            );
+        }
         if (amount0Max > 0 || amount1Max > 0) {
             IRamsesNonfungiblePositionManager.CollectParams memory params =
             IRamsesNonfungiblePositionManager.CollectParams({
@@ -100,29 +80,16 @@ contract RamsesV3Connector is UniswapV3Connector {
         );
     }
 
-    function feeGrowthOutside(
-        address pool,
-        bytes32, // poolId
-        int24 tick_
-    )
-        external
-        view
-        virtual
-        override
-        returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
-    {
-        (,,,, feeGrowthOutside0X128, feeGrowthOutside1X128,,,,) =
-            IRamsesV2Pool(pool).ticks(tick_);
-    }
-
     function isStaked(
         address, // user
         NftPosition calldata
     ) external view virtual override returns (bool) {
-        return true; // Ramses positions are staked by default
+        return false; // Ramses positions stay in the Sickle while earning
+            // rewards
     }
 
     function earned(
+        address, // user
         NftPosition calldata position,
         address[] memory rewardTokens
     ) external view virtual override returns (uint256[] memory) {
@@ -134,10 +101,27 @@ contract RamsesV3Connector is UniswapV3Connector {
         IUniswapV3Factory factory = IUniswapV3Factory(nft.factory());
         address pool = factory.getPool(token0, token1, fee_);
         IRamsesV2Gauge gauge = IRamsesV2Gauge(voter.gauges(pool));
+        if (address(gauge) == address(0)) {
+            return new uint256[](rewardTokens.length);
+        }
         uint256[] memory rewards = new uint256[](rewardTokens.length);
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             rewards[i] = gauge.earned(rewardTokens[i], position.tokenId);
         }
         return rewards;
+    }
+
+    function _get_fee_growth_outside_tick(
+        address pool,
+        int24 tick_
+    )
+        internal
+        view
+        virtual
+        override
+        returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
+    {
+        (,,,, feeGrowthOutside0X128, feeGrowthOutside1X128,,,,) =
+            IRamsesV2Pool(pool).ticks(tick_);
     }
 }

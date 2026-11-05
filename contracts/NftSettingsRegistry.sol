@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import {
-    IUniswapV3Pool,
-    IUniswapV3PoolState,
-    IUniswapV3PoolImmutables
-} from "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
 import { INonfungiblePositionManager } from
     "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 
@@ -30,22 +25,7 @@ import {
 import { SickleFactory } from "contracts/SickleFactory.sol";
 import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
 import { TimelockAdmin } from "contracts/base/TimelockAdmin.sol";
-
-struct PreviousNftSettings {
-    IUniswapV3Pool pool;
-    bool autoRebalance;
-    RebalanceConfig rebalanceConfig;
-    bool automateRewards;
-    RewardConfig rewardConfig;
-    bool autoExit;
-    ExitConfig exitConfig;
-}
-
-interface IPreviousNftSettingsRegistry {
-    function getNftSettings(
-        NftKey memory key
-    ) external view returns (PreviousNftSettings memory);
-}
+import { ISettingsModule } from "contracts/interfaces/ISettingsModule.sol";
 
 contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
     uint256 constant MAX_SLIPPAGE_BP = 500;
@@ -55,19 +35,62 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
     int24 constant MIN_TICK = -MAX_TICK;
 
     SickleFactory public immutable factory;
+
+    /// @notice Registry this one replaces, read through on a local miss so a
+    /// redeploy does not strand existing per-position settings.
+    /// @dev Zero on chains with no predecessor, which disables the fallback.
+    /// Typed as `INftSettingsRegistry`, not a frozen copy of some older
+    /// struct: the predecessor answers in whatever shape it was built with,
+    /// and `getNftSettings` is itself public and self-falling-back, so a
+    /// predecessor that needs to bridge an older layout does that internally,
+    /// in bytecode that is already deployed. Point this at the chain's CURRENT
+    /// registry and generations chain recursively; point it at an older one
+    /// and you skip whatever that chain's current registry was bridging.
+    /// This registry never writes to its predecessor: every write lands
+    /// locally, so a position migrates itself the first time it is written.
+    INftSettingsRegistry public immutable previousRegistry;
+
     ConnectorRegistry private _connectorRegistry;
 
     constructor(
         SickleFactory _factory,
         ConnectorRegistry connectorRegistry,
-        address timelockAdmin
+        address timelockAdmin,
+        INftSettingsRegistry _previousRegistry
     ) TimelockAdmin(timelockAdmin) {
+        if (address(_previousRegistry) != address(0)) {
+            _checkPreviousRegistry(_previousRegistry);
+        }
         factory = _factory;
+        previousRegistry = _previousRegistry;
         _connectorRegistry = connectorRegistry;
         emit ConnectionRegistrySet(address(connectorRegistry));
     }
 
     mapping(bytes32 => NftSettings) settingsMap;
+
+    /// @notice Keys this registry answers for itself, suppressing the
+    /// `previousRegistry` fallback. Set by every local write, including an
+    /// unset.
+    /// @dev A tombstone is required because `_unsetNftSettings` clears
+    /// `settingsMap`, and a cleared entry is otherwise indistinguishable from
+    /// "never written here" — an unset position would fall through and read
+    /// as set again. The same flag also covers the mirror case: an all-default
+    /// `NftSettings` is a legal write (`checkConfigValues` permits it, and it
+    /// is how a user turns every automation off), and stores as an empty
+    /// struct, so emptiness cannot be the discriminator either. Marking on
+    /// every write, not just on unset, settles both with one slot.
+    mapping(bytes32 => bool) public overridesPrevious;
+
+    /// @notice Pluggable per-position settings modules. On a rebalance,
+    /// `transferNftSettings` calls `onRebalance` on each so a module keying
+    /// state by `NftKey` migrates it without wiring its own rebalance hook.
+    ISettingsModule[] public settingsModules;
+
+    error SettingsModuleNotFound();
+
+    event SettingsModuleRegistered(address module);
+    event SettingsModuleDeregistered(address module);
 
     /*  Timelock functions */
 
@@ -78,12 +101,56 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
         emit ConnectionRegistrySet(address(connectorRegistry));
     }
 
+    function settingsModulesLength() external view returns (uint256) {
+        return settingsModules.length;
+    }
+
+    function registerSettingsModule(
+        ISettingsModule module
+    ) external onlyTimelockAdmin {
+        settingsModules.push(module);
+        emit SettingsModuleRegistered(address(module));
+    }
+
+    function deregisterSettingsModule(
+        ISettingsModule module
+    ) external onlyTimelockAdmin {
+        uint256 length = settingsModules.length;
+        for (uint256 i; i < length;) {
+            if (settingsModules[i] == module) {
+                settingsModules[i] = settingsModules[length - 1];
+                settingsModules.pop();
+                emit SettingsModuleDeregistered(address(module));
+                return;
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        revert SettingsModuleNotFound();
+    }
+
     /* Public functions */
 
+    /// @notice Settings for `key`, falling back to `previousRegistry` for
+    /// positions that have never been written here.
+    /// @dev Public and inline on purpose: the predecessor's own
+    /// `getNftSettings` falls back the same way, so a lookup walks the whole
+    /// ancestry rather than a single hop — including any older layout that
+    /// predecessor bridges internally. Same shape end to end, so no field is
+    /// dropped on the way back: an earlier design converted into a
+    /// pre-`autoDeposit` struct and forced that flag off on every read.
     function getNftSettings(
         NftKey memory key
     ) public view returns (NftSettings memory) {
-        return settingsMap[keccak256(abi.encode(key))];
+        bytes32 keyHash = keccak256(abi.encode(key));
+        if (
+            overridesPrevious[keyHash]
+                || address(previousRegistry) == address(0)
+        ) {
+            return settingsMap[keyHash];
+        }
+        return previousRegistry.getNftSettings(key);
     }
 
     function validateHarvestFor(
@@ -110,7 +177,17 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
         }
     }
 
-    // Validate that a rebalanceFor meets the user requirements
+    // @notice Validate that depositFor (automated dust deposit) is enabled
+    function validateDepositFor(
+        NftKey memory key
+    ) public view {
+        NftSettings memory settings = getNftSettings(key);
+        if (!settings.autoDeposit) {
+            revert AutoDepositNotSet();
+        }
+    }
+
+    // @notice Validate that a rebalanceFor meets the user requirements
     function validateRebalanceFor(
         NftKey memory key
     ) public view {
@@ -195,38 +272,6 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
         _unsetNftSettings(key);
     }
 
-    function migrateNftSettings(
-        IPreviousNftSettingsRegistry previousNftSettingsRegistry,
-        INonfungiblePositionManager nftManager,
-        uint256[] memory tokenIds
-    ) external {
-        Sickle sickle = _getSickleByOwner(msg.sender);
-
-        uint256 tokenLength = tokenIds.length;
-        for (uint256 i; i < tokenLength; i++) {
-            NftKey memory key = NftKey({
-                sickle: sickle,
-                nftManager: nftManager,
-                tokenId: tokenIds[i]
-            });
-            PreviousNftSettings memory previousSettings =
-                previousNftSettingsRegistry.getNftSettings(key);
-            NftSettings memory settings = NftSettings({
-                pool: previousSettings.pool,
-                poolId: bytes32(0), // Uniswap V4 only, not used by previous NFT
-                    // settings
-                autoRebalance: previousSettings.autoRebalance,
-                rebalanceConfig: previousSettings.rebalanceConfig,
-                automateRewards: previousSettings.automateRewards,
-                rewardConfig: previousSettings.rewardConfig,
-                autoExit: previousSettings.autoExit,
-                exitConfig: previousSettings.exitConfig,
-                extraData: ""
-            });
-            _setNftSettings(key, settings);
-        }
-    }
-
     /* Sickle functions */
 
     function setNftSettings(
@@ -242,8 +287,8 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
         _setNftSettings(key, settings);
     }
 
-    /// Transfer NFT settings from the old NFT to the new one during a
-    /// rebalance.
+    // @notice Transfer NFT settings from the old NFT to the new one during a
+    // rebalance.
     function transferNftSettings(
         NftKey calldata oldKey,
         NftSettings calldata settings
@@ -271,6 +316,15 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
 
         _unsetNftSettings(oldKey);
         _setNftSettings(newKey, settings);
+
+        // Migrate any module-held per-position settings to the new tokenId.
+        uint256 moduleCount = settingsModules.length;
+        for (uint256 i; i < moduleCount;) {
+            settingsModules[i].onRebalance(oldKey, newKey);
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /* Modifiers */
@@ -329,18 +383,55 @@ contract NftSettingsRegistry is TimelockAdmin, INftSettingsRegistry {
         NftKey memory key,
         NftSettings memory settings
     ) internal checkConfigValues(key, settings) {
-        settingsMap[keccak256(abi.encode(key))] = settings;
+        bytes32 keyHash = keccak256(abi.encode(key));
+        settingsMap[keyHash] = settings;
+        overridesPrevious[keyHash] = true;
         emit NftSettingsSet(key, settings);
     }
 
     function _unsetNftSettings(
         NftKey memory key
     ) internal {
-        delete settingsMap[keccak256(abi.encode(key))];
+        bytes32 keyHash = keccak256(abi.encode(key));
+        delete settingsMap[keyHash];
+        // Tombstone, so the cleared entry does not read through to
+        // `previousRegistry` and come back set.
+        overridesPrevious[keyHash] = true;
         emit NftSettingsUnset(key);
     }
 
-    // Check configuration parameters for errors
+    /// @dev Validate the one constructor argument the type system cannot:
+    /// every address satisfies `INftSettingsRegistry`, so a typo, an EOA, or
+    /// another chain's address all compile. Any of them silently bricks every
+    /// not-yet-migrated read — and with it every validator — while the deploy
+    /// still looks like it succeeded. One plain typed call settles it:
+    /// Solidity's `extcodesize` guard rejects an address holding no code, and
+    /// decoding the reply rejects anything that does not answer in this
+    /// contract's own shape. No byte counting, so nothing here rots when
+    /// `NftSettings` gains a field — the check this replaces pinned one exact
+    /// returndata length and started rejecting current-shape predecessors the
+    /// moment `autoDeposit` was appended. Chains with no predecessor pass
+    /// address(0) and skip this entirely.
+    ///
+    /// The zero key cannot have been written — `checkConfigValues` rejects a
+    /// zero `nftManager` — so a conforming registry answers with an empty
+    /// struct. A predecessor on a wholly different layout whose zero-key reply
+    /// happens to be all zeros still decodes; guarding that is the deploy
+    /// path's job, which pins `previousRegistry` to the chain's recorded
+    /// registry.
+    function _checkPreviousRegistry(
+        INftSettingsRegistry registry
+    ) private view {
+        registry.getNftSettings(
+            NftKey({
+                sickle: Sickle(payable(address(0))),
+                nftManager: INonfungiblePositionManager(address(0)),
+                tokenId: 0
+            })
+        );
+    }
+
+    // @dev Check configuration parameters for errors
     function _checkRebalanceConfig(
         RebalanceConfig memory config
     ) internal pure {

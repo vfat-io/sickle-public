@@ -87,7 +87,9 @@ interface ISlipstreamNonfungiblePositionManager is
     /// position as of the last computation
     /// @return tokensOwed1 The uncollected amount of token1 owed to the
     /// position as of the last computation
-    function positions(uint256 tokenId)
+    function positions(
+        uint256 tokenId
+    )
         external
         view
         returns (
@@ -138,7 +140,9 @@ interface ISlipstreamNonfungiblePositionManager is
     /// @return liquidity The amount of liquidity for this position
     /// @return amount0 The amount of token0
     /// @return amount1 The amount of token1
-    function mint(MintParams calldata params)
+    function mint(
+        MintParams calldata params
+    )
         external
         payable
         returns (
@@ -172,7 +176,9 @@ interface ISlipstreamNonfungiblePositionManager is
     /// @return liquidity The new liquidity amount as a result of the increase
     /// @return amount0 The amount of token0 to acheive resulting liquidity
     /// @return amount1 The amount of token1 to acheive resulting liquidity
-    function increaseLiquidity(IncreaseLiquidityParams calldata params)
+    function increaseLiquidity(
+        IncreaseLiquidityParams calldata params
+    )
         external
         payable
         returns (uint128 liquidity, uint256 amount0, uint256 amount1);
@@ -205,10 +211,9 @@ interface ISlipstreamNonfungiblePositionManager is
     /// @dev for tokens that have very high decimals.
     /// @dev The amount of tokens necessary for the loss is: 3.4028237e+38.
     /// @dev This is equivalent to 1e20 value with 18 decimals.
-    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
-        external
-        payable
-        returns (uint256 amount0, uint256 amount1);
+    function decreaseLiquidity(
+        DecreaseLiquidityParams calldata params
+    ) external payable returns (uint256 amount0, uint256 amount1);
 
     struct CollectParams {
         uint256 tokenId;
@@ -227,22 +232,27 @@ interface ISlipstreamNonfungiblePositionManager is
     /// amount1Max The maximum amount of token1 to collect
     /// @return amount0 The amount of fees collected in token0
     /// @return amount1 The amount of fees collected in token1
-    function collect(CollectParams calldata params)
-        external
-        payable
-        returns (uint256 amount0, uint256 amount1);
+    function collect(
+        CollectParams calldata params
+    ) external payable returns (uint256 amount0, uint256 amount1);
 
     /// @notice Burns a token ID, which deletes it from the NFT contract. The
     /// token must have 0 liquidity and all tokens
     /// must be collected first.
     /// @param tokenId The ID of the token that is being burned
-    function burn(uint256 tokenId) external payable;
+    function burn(
+        uint256 tokenId
+    ) external payable;
 
     /// @notice Sets a new Token Descriptor
     /// @param _tokenDescriptor Address of the new Token Descriptor to be chosen
-    function setTokenDescriptor(address _tokenDescriptor) external;
+    function setTokenDescriptor(
+        address _tokenDescriptor
+    ) external;
 
     /// @notice Sets a new Owner address
     /// @param _owner Address of the new Owner to be chosen
-    function setOwner(address _owner) external;
+    function setOwner(
+        address _owner
+    ) external;
 }

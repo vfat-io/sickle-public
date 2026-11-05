@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { StateLibrary } from
-    "contracts/interfaces/external/uniswap/v4/libraries/StateLibrary.sol";
 import { PoolId } from
     "contracts/interfaces/external/uniswap/v4/types/PoolId.sol";
 import { IPoolManager } from
     "contracts/interfaces/external/uniswap/v4/IPoolManager.sol";
-import { Position } from
-    "contracts/interfaces/external/uniswap/v4/libraries/Position.sol";
 
 /// @title IImmutableState
 /// @notice Interface for the ImmutableState contract

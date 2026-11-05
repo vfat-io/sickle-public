@@ -1,24 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
-import {
-    INftFarmConnector,
-    Farm,
-    NftPosition
-} from "contracts/interfaces/INftFarmConnector.sol";
-import { ISwapRouter } from
-    "contracts/interfaces/external/uniswap/ISwapRouter.sol";
 import {
     UniswapV3Connector,
     NftAddLiquidity,
-    NftRemoveLiquidity,
-    NftPositionInfo,
     NftPoolInfo,
-    NftPoolKey,
-    NftPosition
-} from "contracts/connectors/UniswapV3Connector.sol";
+    NftPoolKey
+} from "contracts/connectors/uniswap/UniswapV3Connector.sol";
 import { IAlgebraPool } from
     "contracts/interfaces/external/algebra/IAlgebraPool.sol";
 import { IAlgebraNonfungiblePositionManager } from
@@ -32,26 +20,6 @@ struct FenixV3SwapExtraData {
 }
 
 contract FenixV3Connector is UniswapV3Connector {
-    function swapExactTokensForTokens(
-        SwapParams memory swap
-    ) external payable override {
-        FenixV3SwapExtraData memory extraData =
-            abi.decode(swap.extraData, (FenixV3SwapExtraData));
-
-        IERC20(swap.tokenIn).approve(extraData.pool, swap.amountIn);
-
-        ISwapRouter.ExactInputParams memory params = ISwapRouter
-            .ExactInputParams({
-            path: extraData.path,
-            recipient: address(this),
-            deadline: block.timestamp,
-            amountIn: swap.amountIn,
-            amountOutMinimum: swap.minAmountOut
-        });
-
-        ISwapRouter(swap.router).exactInput(params);
-    }
-
     function _mint(
         NftAddLiquidity memory addLiquidityParams
     ) internal virtual override {
@@ -93,21 +61,6 @@ contract FenixV3Connector is UniswapV3Connector {
         });
     }
 
-    function feeGrowthOutside(
-        address pool,
-        bytes32, // poolId
-        int24 tick_
-    )
-        external
-        view
-        virtual
-        override
-        returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
-    {
-        (,,,, feeGrowthOutside0X128, feeGrowthOutside1X128) =
-            IAlgebraPool(pool).ticks(tick_);
-    }
-
     function positionPoolKey(
         address poolFactory,
         address nftManager,
@@ -123,16 +76,80 @@ contract FenixV3Connector is UniswapV3Connector {
          });
     }
 
-    function positionInfo(
+    function positionLiquidity(
         address nftManager,
         uint256 tokenId
-    ) public view virtual override returns (NftPositionInfo memory) {
-        (,,,, int24 tickLower, int24 tickUpper, uint128 liquidity,,,,) =
+    )
+        public
+        view
+        virtual
+        override
+        returns (int24 tickLower, int24 tickUpper, uint128 liquidity)
+    {
+        (,,,, tickLower, tickUpper, liquidity,,,,) =
             IAlgebraNonfungiblePositionManager(nftManager).positions(tokenId);
-        return NftPositionInfo({
-            liquidity: liquidity,
+    }
+
+    function _get_fee_growth_outside_tick(
+        address pool,
+        int24 tick
+    )
+        internal
+        view
+        virtual
+        override
+        returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
+    {
+        (,,,, feeGrowthOutside0X128, feeGrowthOutside1X128) =
+            IAlgebraPool(pool).ticks(tick);
+    }
+
+    function _get_fee_growth_global(
+        address pool
+    )
+        internal
+        view
+        virtual
+        override
+        returns (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128)
+    {
+        feeGrowthGlobal0X128 = IAlgebraPool(pool).totalFeeGrowth0Token();
+        feeGrowthGlobal1X128 = IAlgebraPool(pool).totalFeeGrowth1Token();
+    }
+
+    function _get_current_tick(
+        address pool
+    ) internal view virtual override returns (int24 tickCurrent) {
+        (, tickCurrent,,,,) = IAlgebraPool(pool).globalState();
+    }
+
+    function _get_fee_params(
+        address positionManager,
+        uint256 tokenId
+    ) internal view virtual override returns (FeeParams memory) {
+        (
+            ,
+            ,
+            ,
+            ,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 positionFeeGrowthInside0LastX128,
+            uint256 positionFeeGrowthInside1LastX128,
+            uint256 tokensOwed0,
+            uint256 tokensOwed1
+        ) = IAlgebraNonfungiblePositionManager(positionManager).positions(
+            tokenId
+        );
+        return FeeParams({
             tickLower: tickLower,
-            tickUpper: tickUpper
+            tickUpper: tickUpper,
+            liquidity: liquidity,
+            positionFeeGrowthInside0LastX128: positionFeeGrowthInside0LastX128,
+            positionFeeGrowthInside1LastX128: positionFeeGrowthInside1LastX128,
+            tokensOwed0: tokensOwed0,
+            tokensOwed1: tokensOwed1
         });
     }
 }

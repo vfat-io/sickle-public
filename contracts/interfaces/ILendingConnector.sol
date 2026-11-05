@@ -6,7 +6,7 @@ interface ILendingConnector {
         address target,
         uint256 amount,
         bytes memory extraData
-    ) external payable;
+    ) external;
 
     function redeem(
         address target,
@@ -24,18 +24,18 @@ interface ILendingConnector {
         address target,
         uint256 amount,
         bytes memory extraData
-    ) external payable;
+    ) external;
 
     function repay(
         address target,
         uint256 amount,
         bytes memory extraData
-    ) external payable;
+    ) external;
 
     function repayFor(
         address target,
         address borrower,
         uint256 amount,
         bytes memory extraData
-    ) external payable;
+    ) external;
 }

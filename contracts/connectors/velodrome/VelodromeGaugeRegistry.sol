@@ -2,10 +2,12 @@
 pragma solidity ^0.8.17;
 
 import { ICustomConnectorRegistry } from "contracts/ConnectorRegistry.sol";
-import { VelodromeGaugeConnector } from
-    "contracts/connectors/velodrome/VelodromeGaugeConnector.sol";
-import { SlipstreamGaugeConnector } from
-    "contracts/connectors/velodrome/SlipstreamGaugeConnector.sol";
+import {
+    VelodromeGaugeConnector
+} from "contracts/connectors/velodrome/VelodromeGaugeConnector.sol";
+import {
+    SlipstreamGaugeConnector
+} from "contracts/connectors/velodrome/SlipstreamGaugeConnector.sol";
 import { IGaugeRegistryVoter } from "contracts/connectors/GaugeRegistry.sol";
 
 interface IPairFactory {
@@ -19,6 +21,7 @@ contract VelodromeGaugeRegistry is ICustomConnectorRegistry {
     IPairFactory public immutable v2PairFactory;
     IPairFactory public immutable deprecatedSlipstreamPairFactory;
     IPairFactory public immutable slipstreamPairFactory;
+    IPairFactory public immutable slipstreamGaugesV2PairFactory;
     VelodromeGaugeConnector public immutable v2GaugeConnector;
     SlipstreamGaugeConnector public immutable slipstreamGaugeConnector;
 
@@ -27,6 +30,7 @@ contract VelodromeGaugeRegistry is ICustomConnectorRegistry {
         IPairFactory v2PairFactory_,
         IPairFactory deprecatedSlipstreamPairFactory_,
         IPairFactory slipstreamPairFactory_,
+        IPairFactory slipstreamGaugesV2PairFactory_,
         VelodromeGaugeConnector v2GaugeConnector_,
         SlipstreamGaugeConnector slipstreamGaugeConnector_
     ) {
@@ -34,6 +38,7 @@ contract VelodromeGaugeRegistry is ICustomConnectorRegistry {
         v2PairFactory = v2PairFactory_;
         deprecatedSlipstreamPairFactory = deprecatedSlipstreamPairFactory_;
         slipstreamPairFactory = slipstreamPairFactory_;
+        slipstreamGaugesV2PairFactory = slipstreamGaugesV2PairFactory_;
         v2GaugeConnector = v2GaugeConnector_;
         slipstreamGaugeConnector = slipstreamGaugeConnector_;
     }
@@ -47,14 +52,21 @@ contract VelodromeGaugeRegistry is ICustomConnectorRegistry {
                 return address(v2GaugeConnector);
             }
             if (
-                address(deprecatedSlipstreamPairFactory) != address(0)
-                    && deprecatedSlipstreamPairFactory.isPair(pair)
-                    || slipstreamPairFactory.isPair(pair)
+                _isPair(deprecatedSlipstreamPairFactory, pair)
+                    || _isPair(slipstreamPairFactory, pair)
+                    || _isPair(slipstreamGaugesV2PairFactory, pair)
             ) {
                 return address(slipstreamGaugeConnector);
             }
         }
 
         return address(0);
+    }
+
+    function _isPair(
+        IPairFactory factory,
+        address pair
+    ) internal view returns (bool) {
+        return address(factory) != address(0) && factory.isPair(pair);
     }
 }

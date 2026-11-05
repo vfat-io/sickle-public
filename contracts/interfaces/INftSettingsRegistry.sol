@@ -2,6 +2,9 @@
 pragma solidity ^0.8.17;
 
 import { NftKey, NftSettings } from "contracts/structs/NftSettingsStructs.sol";
+import {
+    INonfungiblePositionManager
+} from "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 
 interface INftSettingsRegistry {
     error InvalidNftManager();
@@ -9,6 +12,7 @@ interface INftSettingsRegistry {
     error AutoCompoundNotSet();
     error AutoRebalanceNotSet();
     error AutoExitNotSet();
+    error AutoDepositNotSet();
     error ExitTriggersNotSet();
     error InvalidExitTriggers();
     error InvalidTokenOut();
@@ -41,6 +45,12 @@ interface INftSettingsRegistry {
         NftSettings calldata settings
     ) external;
 
+    function setNftSettings(
+        INonfungiblePositionManager nftManager,
+        uint256 tokenId,
+        NftSettings calldata settings
+    ) external;
+
     function transferNftSettings(
         NftKey calldata oldKey,
         NftSettings calldata settings
@@ -59,6 +69,10 @@ interface INftSettingsRegistry {
     ) external;
 
     function validateCompoundFor(
+        NftKey memory key
+    ) external;
+
+    function validateDepositFor(
         NftKey memory key
     ) external;
 }

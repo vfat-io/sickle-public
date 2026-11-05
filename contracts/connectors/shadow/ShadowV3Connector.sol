@@ -1,28 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ICLPoolFactory } from
     "contracts/interfaces/external/aerodrome/ICLPoolFactory.sol";
-import { INonfungiblePositionManager } from
-    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 import { IShadowNonfungiblePositionManager } from
     "contracts/interfaces/external/shadow/IShadowNonfungiblePositionManager.sol";
 import { UniswapV3Connector } from
-    "contracts/connectors/velodrome/SlipstreamNftConnector.sol";
+    "contracts/connectors/uniswap/UniswapV3Connector.sol";
 import {
     NftAddLiquidity,
-    NftRemoveLiquidity,
-    NftPositionInfo,
     NftPoolKey
 } from "contracts/interfaces/INftLiquidityConnector.sol";
-import {
-    INftFarmConnector,
-    Farm,
-    NftPosition
-} from "contracts/interfaces/INftFarmConnector.sol";
-import { IShadowGaugeV3 } from
-    "contracts/interfaces/external/shadow/IShadowGaugeV3.sol";
+import { NftPosition } from "contracts/structs/NftFarmStrategyStructs.sol";
 import {
     ShadowRewardBehavior,
     ShadowV3GaugeClaim
@@ -45,7 +34,7 @@ contract ShadowV3Connector is UniswapV3Connector, ShadowV3GaugeClaim {
         uint128 amount0Max,
         uint128 amount1Max,
         bytes calldata extraData
-    ) external payable override {
+    ) external override {
         if (amount0Max != 0 || amount1Max != 0) {
             // Claim fees if applicable
             IShadowNonfungiblePositionManager.CollectParams memory params =
@@ -71,17 +60,17 @@ contract ShadowV3Connector is UniswapV3Connector, ShadowV3GaugeClaim {
         }
     }
 
-    function positionInfo(
+    function positionLiquidity(
         address nftManager,
         uint256 tokenId
-    ) public view override returns (NftPositionInfo memory) {
-        (,,, int24 tickLower, int24 tickUpper, uint128 liquidity,,,,) =
+    )
+        public
+        view
+        override
+        returns (int24 tickLower, int24 tickUpper, uint128 liquidity)
+    {
+        (,,, tickLower, tickUpper, liquidity,,,,) =
             IShadowNonfungiblePositionManager(nftManager).positions(tokenId);
-        return NftPositionInfo({
-            liquidity: liquidity,
-            tickLower: tickLower,
-            tickUpper: tickUpper
-        });
     }
 
     function positionPoolKey(
@@ -124,5 +113,34 @@ contract ShadowV3Connector is UniswapV3Connector, ShadowV3GaugeClaim {
         IShadowNonfungiblePositionManager(address(addLiquidityParams.nft)).mint(
             params
         );
+    }
+
+    function _get_fee_params(
+        address positionManager,
+        uint256 tokenId
+    ) internal view virtual override returns (FeeParams memory) {
+        (
+            ,
+            ,
+            ,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 positionFeeGrowthInside0LastX128,
+            uint256 positionFeeGrowthInside1LastX128,
+            uint256 tokensOwed0,
+            uint256 tokensOwed1
+        ) = IShadowNonfungiblePositionManager(positionManager).positions(
+            tokenId
+        );
+        return FeeParams({
+            tickLower: tickLower,
+            tickUpper: tickUpper,
+            liquidity: liquidity,
+            positionFeeGrowthInside0LastX128: positionFeeGrowthInside0LastX128,
+            positionFeeGrowthInside1LastX128: positionFeeGrowthInside1LastX128,
+            tokensOwed0: tokensOwed0,
+            tokensOwed1: tokensOwed1
+        });
     }
 }
