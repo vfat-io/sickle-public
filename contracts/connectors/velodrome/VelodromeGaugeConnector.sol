@@ -11,7 +11,7 @@ contract VelodromeGaugeConnector is IFarmConnector {
         Farm calldata farm,
         address token,
         bytes memory // extraData
-    ) external payable override {
+    ) external override {
         uint256 amount = IERC20(token).balanceOf(address(this));
         SafeTransferLib.safeApprove(token, farm.stakingContract, amount);
         IGauge(farm.stakingContract).deposit(amount);
@@ -47,5 +47,12 @@ contract VelodromeGaugeConnector is IFarmConnector {
         uint256[] memory rewards = new uint256[](1);
         rewards[0] = IGauge(farm.stakingContract).earned(user);
         return rewards;
+    }
+
+    function isStaked(
+        Farm calldata,
+        address // user
+    ) external pure override returns (bool) {
+        return true;
     }
 }

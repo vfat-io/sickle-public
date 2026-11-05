@@ -79,8 +79,8 @@ contract LendingStrategy is FlashloanInitiator, StrategyModule {
     ) public payable flashloanParamCheck(flashloanParams) {
         Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
 
-        address[] memory targets = new address[](2);
-        bytes[] memory data = new bytes[](2);
+        address[] memory targets = new address[](1);
+        bytes[] memory data = new bytes[](1);
 
         targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
@@ -93,10 +93,15 @@ contract LendingStrategy is FlashloanInitiator, StrategyModule {
             )
         );
 
-        targets[1] = address(zapLib);
-        data[1] = abi.encodeCall(ZapLib.zapIn, (depositParams.zap));
-
         sickle.multicall{ value: msg.value }(targets, data);
+
+        targets = new address[](1);
+        data = new bytes[](1);
+
+        targets[0] = address(zapLib);
+        data[0] = abi.encodeCall(ZapLib.zapIn, (depositParams.zap));
+
+        sickle.multicall(targets, data);
 
         flashloan_deposit(address(sickle), increaseParams, flashloanParams);
 

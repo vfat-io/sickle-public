@@ -10,6 +10,30 @@ struct Pool {
     uint24 fee;
 }
 
+struct NftPoolKey {
+    address poolAddress;
+    bytes32 poolId;
+}
+
+struct NftPoolInfo {
+    address token0;
+    address token1;
+    uint24 fee;
+    uint24 tickSpacing;
+    uint160 sqrtPriceX96;
+    int24 tick;
+    uint128 liquidity;
+    uint256 feeGrowthGlobal0X128;
+    uint256 feeGrowthGlobal1X128;
+}
+
+// Maintained for backwards compatibility with NftSettingsRegistry
+struct NftPositionInfo {
+    uint128 liquidity;
+    int24 tickLower;
+    int24 tickUpper;
+}
+
 struct NftAddLiquidity {
     INonfungiblePositionManager nft;
     uint256 tokenId;

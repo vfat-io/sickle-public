@@ -12,7 +12,7 @@ contract MasterchefConnector is IFarmConnector {
         Farm calldata farm,
         address token,
         bytes memory // extraData
-    ) external payable virtual override {
+    ) external virtual override {
         uint256 amount = IERC20(token).balanceOf(address(this));
         SafeTransferLib.safeApprove(token, farm.stakingContract, amount);
         IMasterchef(farm.stakingContract).deposit(farm.poolIndex, amount);
@@ -48,9 +48,15 @@ contract MasterchefConnector is IFarmConnector {
         address[] calldata
     ) external view virtual override returns (uint256[] memory) {
         uint256[] memory rewards = new uint256[](1);
-        (, uint256 pendingRewards) =
-            IMasterchef(farm.stakingContract).userInfo(farm.poolIndex, user);
-        rewards[0] = pendingRewards;
+        rewards[0] =
+            IMasterchef(farm.stakingContract).pendingSushi(farm.poolIndex, user);
         return rewards;
+    }
+
+    function isStaked(
+        Farm calldata,
+        address // user
+    ) external pure override returns (bool) {
+        return true;
     }
 }

@@ -18,6 +18,12 @@ import { ILiquidityConnector } from
 import { IPositionSettingsRegistry } from
     "contracts/interfaces/IPositionSettingsRegistry.sol";
 
+/// @notice The `ExitConfig` shape used before the scalar reserve triggers
+/// became the `triggerReservesLow` array (April 2025), and the settings struct
+/// wrapping it.
+/// @dev Reached only by the opt-in `migratePositionSettings`. NOT the shape the
+/// `previousRegistry` read-through targets: every registry generation still
+/// holding live settings was deployed after that change.
 struct PreviousExitConfig {
     uint256 triggerPriceHigh;
     uint256 triggerPriceLow;
@@ -52,16 +58,46 @@ contract PositionSettingsRegistry is
     uint256 constant MAX_PRICE_IMPACT_BP = 5000;
 
     SickleFactory public immutable factory;
+
+    /// @notice Registry this one replaces, read through on a local miss so a
+    /// redeploy does not strand existing per-position settings.
+    /// @dev Zero on chains with no predecessor, which disables the fallback.
+    /// Typed as `IPositionSettingsRegistry`, not a frozen copy of some older
+    /// struct: the predecessor answers in whatever shape it was built with,
+    /// and `getPositionSettings` is itself public and self-falling-back, so a
+    /// predecessor that needs to bridge an older layout does that internally,
+    /// in bytecode that is already deployed. Point this at the chain's CURRENT
+    /// registry and generations chain recursively; point it at an older one
+    /// and you skip whatever that chain's current registry was bridging.
+    /// This registry never writes to its predecessor: every write lands
+    /// locally, so a position migrates itself the first time it is written.
+    IPositionSettingsRegistry public immutable previousRegistry;
+
     ConnectorRegistry private _connectorRegistry;
 
     mapping(bytes32 => PositionSettings) positionSettingsMap;
 
+    /// @notice Keys this registry answers for itself, suppressing the
+    /// `previousRegistry` fallback. Set by every local write.
+    /// @dev A tombstone is required because an all-default `PositionSettings`
+    /// is a legal write — `checkPositionSettings` permits it, and it is how a
+    /// user turns automation off — and it stores as an empty struct. Emptiness
+    /// therefore cannot be the discriminator: without this flag a
+    /// deliberately-disabled position would read through and come back
+    /// enabled.
+    mapping(bytes32 => bool) public overridesPrevious;
+
     constructor(
         SickleFactory _factory,
         ConnectorRegistry connectorRegistry,
-        address timelockAdmin
+        address timelockAdmin,
+        IPositionSettingsRegistry _previousRegistry
     ) TimelockAdmin(timelockAdmin) {
+        if (address(_previousRegistry) != address(0)) {
+            _checkPreviousRegistry(_previousRegistry);
+        }
         factory = _factory;
+        previousRegistry = _previousRegistry;
         _connectorRegistry = connectorRegistry;
         emit ConnectionRegistrySet(address(connectorRegistry));
     }
@@ -77,11 +113,22 @@ contract PositionSettingsRegistry is
 
     /* Public functions */
 
+    /// @notice Settings for `key`, falling back to `previousRegistry` for
+    /// positions that have never been written here.
+    /// @dev Public and inline on purpose: the predecessor's own
+    /// `getPositionSettings` falls back the same way, so a lookup walks the
+    /// whole ancestry rather than a single hop.
     function getPositionSettings(
         PositionKey calldata key
     ) public view returns (PositionSettings memory) {
         bytes32 keyHash = keccak256(abi.encode(key));
-        return positionSettingsMap[keyHash];
+        if (
+            overridesPrevious[keyHash]
+                || address(previousRegistry) == address(0)
+        ) {
+            return positionSettingsMap[keyHash];
+        }
+        return previousRegistry.getPositionSettings(key);
     }
 
     /* Owner functions */
@@ -97,6 +144,7 @@ contract PositionSettingsRegistry is
         });
         bytes32 keyHash = keccak256(abi.encode(key));
         positionSettingsMap[keyHash] = settings;
+        overridesPrevious[keyHash] = true;
         emit PositionSettingsSet(key, settings);
     }
 
@@ -112,6 +160,7 @@ contract PositionSettingsRegistry is
         }
         bytes32 keyHash = keccak256(abi.encode(key));
         positionSettingsMap[keyHash] = settings;
+        overridesPrevious[keyHash] = true;
         emit PositionSettingsSet(key, settings);
     }
 
@@ -129,8 +178,10 @@ contract PositionSettingsRegistry is
                 poolIndex: farms[i].poolIndex
             });
             bytes32 keyHash = keccak256(abi.encode(key));
+            _materializePrevious(key, keyHash);
             positionSettingsMap[keyHash].automateRewards = true;
             positionSettingsMap[keyHash].rewardConfig = rewardConfig;
+            overridesPrevious[keyHash] = true;
             emit PositionSettingsSet(key, positionSettingsMap[keyHash]);
         }
     }
@@ -176,6 +227,7 @@ contract PositionSettingsRegistry is
                 previousSettings.exitConfig.exitTokenOutHigh;
             bytes32 keyHash = keccak256(abi.encode(keys[i]));
             positionSettingsMap[keyHash] = settings;
+            overridesPrevious[keyHash] = true;
             emit PositionSettingsSet(keys[i], settings);
         }
     }
@@ -293,6 +345,53 @@ contract PositionSettingsRegistry is
     }
 
     /* Internal */
+
+    /// @dev Copy `previousRegistry`'s entry into local storage ahead of a
+    /// partial write. Full writes need none of this — they replace the whole
+    /// struct — but `setMultiplePositionSettings` only touches the reward
+    /// fields, and the tombstone it sets would otherwise strand the rest of
+    /// the position's settings (pool, router, exit config) in the predecessor.
+    function _materializePrevious(
+        PositionKey memory key,
+        bytes32 keyHash
+    ) private {
+        if (
+            overridesPrevious[keyHash]
+                || address(previousRegistry) == address(0)
+        ) {
+            return;
+        }
+        positionSettingsMap[keyHash] =
+            previousRegistry.getPositionSettings(key);
+    }
+
+    /// @dev Validate the one constructor argument the type system cannot:
+    /// every address satisfies `IPositionSettingsRegistry`, so a typo, an EOA,
+    /// or another chain's address all compile. Any of them silently bricks
+    /// every not-yet-migrated read — and with it every validator — while the
+    /// deploy still looks like it succeeded. One plain typed call settles it:
+    /// Solidity's `extcodesize` guard rejects an address holding no code, and
+    /// decoding the reply rejects anything that does not answer in this
+    /// contract's own shape. No byte counting, so nothing here rots when
+    /// `PositionSettings` gains a field. Chains with no predecessor pass
+    /// address(0) and skip this entirely.
+    ///
+    /// The zero key cannot have been written — every write path resolves a
+    /// real sickle — so a conforming registry answers with an empty struct.
+    /// A predecessor on a wholly different layout whose zero-key reply happens
+    /// to be all zeros still decodes; guarding that is the deploy path's job,
+    /// which pins `previousRegistry` to the chain's recorded registry.
+    function _checkPreviousRegistry(
+        IPositionSettingsRegistry registry
+    ) private view {
+        registry.getPositionSettings(
+            PositionKey({
+                sickle: Sickle(payable(address(0))),
+                stakingContract: address(0),
+                poolIndex: 0
+            })
+        );
+    }
 
     function _checkRewardConfig(
         RewardConfig memory rewardConfig

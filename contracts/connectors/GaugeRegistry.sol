@@ -12,6 +12,10 @@ interface IGaugeRegistryVoter {
         address target
     ) external view returns (bool);
 
+    function isCLGauge(
+        address target
+    ) external view returns (bool);
+
     function poolForGauge(
         address gauge
     ) external view returns (address);

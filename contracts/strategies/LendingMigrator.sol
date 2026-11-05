@@ -96,7 +96,7 @@ contract LendingMigrator is StrategyModule, DelegateModule {
             )
         );
 
-        _delegateTo(
+        _delegateToConnector(
             connectorRegistry.connectorOf(params.lendingMarket),
             abi.encodeCall(
                 ILendingConnector.repayFor, // Repay all
@@ -111,7 +111,7 @@ contract LendingMigrator is StrategyModule, DelegateModule {
             IERC20(params.lendingMarket).balanceOf(params.borrowerAddress)
         );
 
-        _delegateTo(
+        _delegateToConnector(
             connectorRegistry.connectorOf(params.lendingMarket),
             abi.encodeCall(
                 ILendingConnector.borrow,

@@ -6,7 +6,7 @@ import { IUniswapV3Pool } from
 import { INonfungiblePositionManager } from
     "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 import { NftZapIn, NftZapOut } from "contracts/structs/NftZapStructs.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
+import { SwapParams } from "contracts/structs/SwapStructs.sol";
 import { Farm } from "contracts/structs/FarmStrategyStructs.sol";
 
 struct NftPosition {
@@ -59,6 +59,16 @@ struct NftRebalance {
     NftHarvest harvest;
     NftWithdraw withdraw;
     NftIncrease increase;
+}
+
+/// @notice The pool price a keeper-built rebalance is valid for: the
+/// inclusive sqrtPriceX96 window in which the add step's `amount0Min` /
+/// `amount1Min` can still be met. `boundedRebalanceFor` reverts before
+/// the harvest/withdraw/swap when the pool is outside it. Both fields zero
+/// declares no window. See ShiftMath._checkRebalancePriceGuardInner.
+struct RebalancePriceBounds {
+    uint160 minSqrtPriceX96;
+    uint160 maxSqrtPriceX96;
 }
 
 struct NftMove {

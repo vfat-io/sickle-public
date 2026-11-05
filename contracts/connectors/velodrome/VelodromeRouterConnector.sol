@@ -7,36 +7,36 @@ import { ICLPool } from "contracts/interfaces/external/aerodrome/ICLPool.sol";
 import {
     ILiquidityConnector,
     AddLiquidityParams,
-    RemoveLiquidityParams,
-    SwapParams
+    RemoveLiquidityParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
+
+import { SolidlyPoolPrice } from "contracts/libraries/SolidlyPoolPrice.sol";
 
 struct VelodromeLiquidityExtraData {
     bool isStablePool;
 }
 
-struct VelodromeSwapExtraData {
-    IRouter.Route[] routes;
-}
-
 contract VelodromeRouterConnector is ILiquidityConnector {
+    error InvalidParameters();
+
     function addLiquidity(
         AddLiquidityParams memory addLiquidityParams
-    ) external payable override {
+    ) external override {
         VelodromeLiquidityExtraData memory _extraData = abi.decode(
             addLiquidityParams.extraData, (VelodromeLiquidityExtraData)
         );
-        IRouter(addLiquidityParams.router).addLiquidity(
-            addLiquidityParams.tokens[0],
-            addLiquidityParams.tokens[1],
-            _extraData.isStablePool,
-            addLiquidityParams.desiredAmounts[0],
-            addLiquidityParams.desiredAmounts[1],
-            addLiquidityParams.minAmounts[0],
-            addLiquidityParams.minAmounts[1],
-            address(this),
-            block.timestamp
-        );
+        IRouter(addLiquidityParams.router)
+            .addLiquidity(
+                addLiquidityParams.tokens[0],
+                addLiquidityParams.tokens[1],
+                _extraData.isStablePool,
+                addLiquidityParams.desiredAmounts[0],
+                addLiquidityParams.desiredAmounts[1],
+                addLiquidityParams.minAmounts[0],
+                addLiquidityParams.minAmounts[1],
+                address(this),
+                block.timestamp
+            );
     }
 
     function removeLiquidity(
@@ -45,58 +45,46 @@ contract VelodromeRouterConnector is ILiquidityConnector {
         VelodromeLiquidityExtraData memory _extraData = abi.decode(
             removeLiquidityParams.extraData, (VelodromeLiquidityExtraData)
         );
-        IRouter(removeLiquidityParams.router).removeLiquidity(
-            removeLiquidityParams.tokens[0],
-            removeLiquidityParams.tokens[1],
-            _extraData.isStablePool,
-            removeLiquidityParams.lpAmountIn,
-            removeLiquidityParams.minAmountsOut[0],
-            removeLiquidityParams.minAmountsOut[1],
-            address(this),
-            block.timestamp
-        );
+        IRouter(removeLiquidityParams.router)
+            .removeLiquidity(
+                removeLiquidityParams.tokens[0],
+                removeLiquidityParams.tokens[1],
+                _extraData.isStablePool,
+                removeLiquidityParams.lpAmountIn,
+                removeLiquidityParams.minAmountsOut[0],
+                removeLiquidityParams.minAmountsOut[1],
+                address(this),
+                block.timestamp
+            );
     }
 
-    function swapExactTokensForTokens(
-        SwapParams memory swap
-    ) external payable virtual override {
-        VelodromeSwapExtraData memory _extraData =
-            abi.decode(swap.extraData, (VelodromeSwapExtraData));
-        IRouter(swap.router).swapExactTokensForTokens(
-            swap.amountIn,
-            swap.minAmountOut,
-            _extraData.routes,
-            address(this),
-            block.timestamp
-        );
-    }
-
+    /// @dev Raw quote/base units, scaled to 1e18. Stable prices use the
+    /// marginal invariant slope, rather than a fee-bearing swap quote.
     function getPoolPrice(
         address lpToken,
         uint256 baseTokenIndex,
-        uint256 // quoteTokenIndex
+        uint256 quoteTokenIndex
     ) external view virtual override returns (uint256 price) {
-        address token0 = ICLPool(lpToken).token0();
-        address token1 = ICLPool(lpToken).token1();
-
-        uint256 amountOut0 = ICLPool(lpToken).getAmountOut(1, token0);
-        if (amountOut0 > 0) {
-            price = amountOut0 * 1e18;
-        } else {
-            uint256 amountOut1 = ICLPool(lpToken).getAmountOut(1, token1);
-            if (amountOut1 == 0) {
-                revert InvalidPrice();
-            }
-            price = 1e18 / amountOut1;
+        if (
+            baseTokenIndex > 1 || quoteTokenIndex > 1
+                || baseTokenIndex == quoteTokenIndex
+        ) {
+            revert InvalidParameters();
         }
-
-        if (price == 0) {
-            revert InvalidPrice();
-        }
-
-        if (baseTokenIndex == 1) {
-            price = 1e36 / price;
-        }
+        (
+            uint256 unit0,
+            uint256 unit1,
+            uint256 reserve0,
+            uint256 reserve1,
+            bool stable,,
+        ) = ICLPool(lpToken).metadata();
+        return baseTokenIndex == 0
+            ? SolidlyPoolPrice.getPrice(
+                reserve0, reserve1, unit0, unit1, stable
+            )
+            : SolidlyPoolPrice.getPrice(
+                    reserve1, reserve0, unit1, unit0, stable
+                );
     }
 
     function getReserves(

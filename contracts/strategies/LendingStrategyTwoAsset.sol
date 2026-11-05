@@ -12,7 +12,7 @@ import {
     Sickle,
     ConnectorRegistry
 } from "contracts/modules/StrategyModule.sol";
-import { SwapParams } from "contracts/structs/LiquidityStructs.sol";
+import { SwapParams } from "contracts/structs/SwapStructs.sol";
 import { TransferLib } from "contracts/libraries/TransferLib.sol";
 import { SwapLib } from "contracts/libraries/SwapLib.sol";
 import { LendingStrategyFees } from
@@ -71,11 +71,11 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, StrategyModule {
         bytes32 referralCode
     ) public payable {
         Sickle sickle = getOrDeploySickle(msg.sender, approved, referralCode);
-        address[] memory targets = new address[](2);
-        targets[0] = address(transferLib);
-        targets[1] = connectorRegistry.connectorOf(collateralTokenParams.market);
 
-        bytes[] memory data = new bytes[](2);
+        address[] memory targets = new address[](1);
+        bytes[] memory data = new bytes[](1);
+
+        targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
             TransferLib.transferTokenFromUser,
             (
@@ -85,7 +85,14 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, StrategyModule {
                 LendingStrategyFees.Deposit
             )
         );
-        data[1] = abi.encodeCall(
+
+        sickle.multicall{ value: msg.value }(targets, data);
+
+        targets = new address[](1);
+        data = new bytes[](1);
+
+        targets[0] = connectorRegistry.connectorOf(collateralTokenParams.market);
+        data[0] = abi.encodeCall(
             ILendingConnector.mint,
             (
                 collateralTokenParams.market,
@@ -94,7 +101,7 @@ contract LendingStrategyTwoAsset is FlashloanInitiator, StrategyModule {
             )
         );
 
-        sickle.multicall{ value: msg.value }(targets, data);
+        sickle.multicall(targets, data);
 
         flashloan_deposit(address(sickle), increaseParams, flashloanParams);
     }

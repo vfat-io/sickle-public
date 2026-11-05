@@ -5,27 +5,25 @@ import { ICurvePool } from "contracts/interfaces/external/curve/ICurvePool.sol";
 import {
     ILiquidityConnector,
     AddLiquidityParams,
-    RemoveLiquidityParams,
-    SwapParams
+    RemoveLiquidityParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
+import { IFarmConnector, Farm } from "contracts/interfaces/IFarmConnector.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 struct CurveAddLiquidityExtraData {
     uint256 minMintAmount;
-}
-
-struct CurveSwapExtraData {
-    int128 i;
-    int128 j;
 }
 
 interface IERC20Decimals {
     function decimals() external view returns (uint8);
 }
 
-contract CurvePoolConnector is ILiquidityConnector {
+contract CurvePoolConnector is ILiquidityConnector, IFarmConnector {
+    error NotSupported();
+
     function addLiquidity(
         AddLiquidityParams memory addLiquidityParams
-    ) external payable override {
+    ) external override {
         CurveAddLiquidityExtraData memory extraData = abi.decode(
             addLiquidityParams.extraData, (CurveAddLiquidityExtraData)
         );
@@ -41,17 +39,6 @@ contract CurvePoolConnector is ILiquidityConnector {
         ICurvePool(removeLiquidityParams.router).remove_liquidity(
             removeLiquidityParams.lpAmountIn,
             removeLiquidityParams.minAmountsOut
-        );
-    }
-
-    function swapExactTokensForTokens(
-        SwapParams memory swap
-    ) external payable override {
-        CurveSwapExtraData memory extraData =
-            abi.decode(swap.extraData, (CurveSwapExtraData));
-
-        ICurvePool(swap.router).exchange(
-            extraData.i, extraData.j, swap.amountIn, swap.minAmountOut
         );
     }
 
@@ -110,5 +97,57 @@ contract CurvePoolConnector is ILiquidityConnector {
         for (uint256 i = 0; i < tokens.length; i++) {
             tokens[i] = ICurvePool(lpToken).coins(i);
         }
+    }
+
+    // IFarmConnector implementation - no-op for pools without gauges
+    // LP tokens stay in the caller's wallet (Sickle)
+
+    function deposit(
+        Farm calldata, // farm
+        address, // token
+        bytes memory // _extraData
+    ) external pure override {
+        // No-op: LP tokens stay in the caller's wallet
+    }
+
+    function withdraw(
+        Farm calldata, // farm
+        uint256, // amount
+        bytes memory // _extraData
+    ) external pure override {
+        // No-op: LP tokens are already in the caller's wallet
+    }
+
+    function claim(
+        Farm calldata, // farm
+        bytes memory // extraData
+    ) external pure override {
+        // No-op: No rewards to claim for pools without gauges
+    }
+
+    function balanceOf(
+        Farm calldata farm,
+        address user
+    ) external view override returns (uint256) {
+        // Return the LP token balance directly from the pool
+        return IERC20(farm.stakingContract).balanceOf(user);
+    }
+
+    function earned(
+        Farm calldata, // farm
+        address, // user
+        address[] calldata rewardTokens
+    ) external pure override returns (uint256[] memory) {
+        // No rewards for pools without gauges
+        uint256[] memory rewards = new uint256[](rewardTokens.length);
+        return rewards;
+    }
+
+    function isStaked(
+        Farm calldata, // farm
+        address // user
+    ) external pure override returns (bool) {
+        // LP tokens are held but not staked
+        return false;
     }
 }

@@ -34,7 +34,9 @@ abstract contract TimelockAdmin {
     /// WRITE FUNCTIONS ///
 
     /// @param timelockAdmin_ Address of the timelockAdmin
-    constructor(address timelockAdmin_) {
+    constructor(
+        address timelockAdmin_
+    ) {
         emit TimelockAdminSet(timelockAdmin, timelockAdmin_);
         timelockAdmin = timelockAdmin_;
     }
@@ -42,10 +44,9 @@ abstract contract TimelockAdmin {
     /// @notice Sets a new timelockAdmin
     /// @dev Can only be called by the current timelockAdmin
     /// @param newTimelockAdmin Address of the new timelockAdmin
-    function setTimelockAdmin(address newTimelockAdmin)
-        external
-        onlyTimelockAdmin
-    {
+    function setTimelockAdmin(
+        address newTimelockAdmin
+    ) external onlyTimelockAdmin {
         emit TimelockAdminSet(timelockAdmin, newTimelockAdmin);
         timelockAdmin = newTimelockAdmin;
     }

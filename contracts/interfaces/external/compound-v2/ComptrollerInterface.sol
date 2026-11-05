@@ -8,18 +8,17 @@ abstract contract ComptrollerInterface {
     /**
      * Assets You Are In **
      */
+    function enterMarkets(
+        address[] calldata cTokens
+    ) external virtual returns (uint256[] memory);
 
-    function enterMarkets(address[] calldata cTokens)
-        external
-        virtual
-        returns (uint256[] memory);
-
-    function exitMarket(address cToken) external virtual returns (uint256);
+    function exitMarket(
+        address cToken
+    ) external virtual returns (uint256);
 
     /**
      * Policy Hooks **
      */
-
     function mintAllowed(
         address cToken,
         address minter,
@@ -123,7 +122,6 @@ abstract contract ComptrollerInterface {
     /**
      * Liquidity/Liquidation Calculations **
      */
-
     function liquidateCalculateSeizeTokens(
         address cTokenBorrowed,
         address cTokenCollateral,

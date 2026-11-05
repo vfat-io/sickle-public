@@ -24,12 +24,13 @@ interface IRewardDistributor {
         address account
     ) external view returns (uint256 rewardAccrued);
 
-    function rewardTokens(uint256 index) external view returns (address);
+    function rewardTokens(
+        uint256 index
+    ) external view returns (address);
 
-    function rewardTokenExists(address rewardToken)
-        external
-        view
-        returns (bool);
+    function rewardTokenExists(
+        address rewardToken
+    ) external view returns (bool);
 
     function getBlockNumber() external view returns (uint32);
 }

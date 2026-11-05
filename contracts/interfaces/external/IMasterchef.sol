@@ -23,4 +23,9 @@ interface IMasterchef {
         uint256 poolId,
         address user
     ) external view returns (uint256 amount, uint256 rewardDebt);
+
+    function pendingSushi(
+        uint256 poolId,
+        address user
+    ) external view returns (uint256 amount);
 }

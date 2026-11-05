@@ -166,6 +166,21 @@ interface IShadowGaugeV3 {
         uint256 tokenId
     ) external view returns (uint256 reward);
 
+    /// @notice Returns the amount of rewards earned for an NFP with explicit
+    /// NFP manager address.
+    /// @param token The address of the token for which to retrieve the earned
+    /// rewards.
+    /// @param nfpManagerAddress The address of the NFP manager contract.
+    /// @param tokenId The identifier of the specific NFP for which to retrieve
+    /// the earned rewards.
+    /// @return reward The amount of rewards earned for the specified NFP and
+    /// tokens.
+    function earned(
+        address token,
+        address nfpManagerAddress,
+        uint256 tokenId
+    ) external view returns (uint256 reward);
+
     /// @notice Returns the amount of rewards earned during a period for an NFP.
     /// @param period The period for which to retrieve the earned rewards.
     /// @param token The address of the token for which to retrieve the earned

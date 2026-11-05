@@ -33,13 +33,13 @@ contract NuriV3Connector is RamsesV3Connector {
         );
     }
 
-    function feeGrowthOutside(
+    function _get_fee_growth_outside_tick(
         address pool,
-        bytes32, // poolId
         int24 tick
     )
-        external
+        internal
         view
+        virtual
         override
         returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128)
     {

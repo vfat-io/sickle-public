@@ -29,7 +29,9 @@ contract SweepStrategy is StrategyModule {
         transferLib = transferLib_;
     }
 
-    function sweepTokens(address[] memory tokens) public {
+    function sweepTokens(
+        address[] memory tokens
+    ) public {
         Sickle sickle = getSickle(msg.sender);
 
         address[] memory targets = new address[](1);

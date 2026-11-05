@@ -2,12 +2,7 @@
 pragma solidity ^0.8.17;
 
 import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
-import {
-    StrategyModule,
-    SickleFactory,
-    Sickle,
-    ConnectorRegistry
-} from "contracts/modules/StrategyModule.sol";
+import { Sickle, ConnectorRegistry } from "contracts/modules/StrategyModule.sol";
 import { DelegateModule } from "contracts/modules/DelegateModule.sol";
 import { ILendingConnector } from "contracts/interfaces/ILendingConnector.sol";
 import { SwapLib } from "contracts/libraries/SwapLib.sol";
@@ -34,7 +29,7 @@ contract FlashloanLib is DelegateModule, LendingStructs {
         FlashloanStrategy flashloanStrategy_,
         FeesLib feesLib_,
         SwapLib swapLib_
-    ) DelegateModule() {
+    ) {
         connectorRegistry = connectorRegistry_;
         flashloanStrategy = flashloanStrategy_;
         feesLib = feesLib_;
@@ -100,7 +95,7 @@ contract FlashloanLib is DelegateModule, LendingStructs {
         // updating sickle balance after fees and swap
         uint256 supplyAmount = feesLib.getBalance(sickle, increaseParams.token);
 
-        _delegateTo(
+        _delegateToConnector(
             connectorRegistry.connectorOf(increaseParams.market),
             abi.encodeCall(
                 ILendingConnector.mint,
@@ -108,7 +103,7 @@ contract FlashloanLib is DelegateModule, LendingStructs {
             )
         );
 
-        _delegateTo(
+        _delegateToConnector(
             connectorRegistry.connectorOf(increaseParams.market),
             abi.encodeCall(
                 ILendingConnector.borrow,
@@ -169,7 +164,7 @@ contract FlashloanLib is DelegateModule, LendingStructs {
 
         _chargeFlashloanFees(flashloanedAsset);
 
-        _delegateTo(
+        _delegateToConnector(
             connectorRegistry.connectorOf(decreaseParams.market),
             abi.encodeCall(
                 ILendingConnector.repay,
@@ -182,7 +177,7 @@ contract FlashloanLib is DelegateModule, LendingStructs {
         );
 
         if (decreaseParams.redeemAmount > 0) {
-            _delegateTo(
+            _delegateToConnector(
                 connectorRegistry.connectorOf(decreaseParams.market),
                 abi.encodeCall(
                     ILendingConnector.redeem,

@@ -19,7 +19,7 @@ contract MasterchefWithReferrerConnector is MasterchefConnector {
         Farm calldata farm,
         address token,
         bytes memory extraData
-    ) external payable override {
+    ) external override {
         uint256 amount = IERC20(token).balanceOf(address(this));
         SafeTransferLib.safeApprove(token, farm.stakingContract, amount);
         MasterchefExtraData memory masterChefExtraData =

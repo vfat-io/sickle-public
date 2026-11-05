@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import { IERC721Enumerable } from
-    "lib/openzeppelin-contracts/contracts/interfaces/IERC721Enumerable.sol";
-import { INonfungiblePositionManager } from
-    "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
 import {
-    IUniswapV3Pool,
-    IUniswapV3PoolImmutables
+    INonfungiblePositionManager
+} from "contracts/interfaces/external/uniswap/INonfungiblePositionManager.sol";
+import {
+    IUniswapV3Pool
 } from "contracts/interfaces/external/uniswap/IUniswapV3Pool.sol";
 
 import {
@@ -17,24 +15,32 @@ import {
 } from "contracts/modules/StrategyModule.sol";
 import { ConnectorRegistry } from "contracts/ConnectorRegistry.sol";
 import { INftFarmConnector } from "contracts/interfaces/INftFarmConnector.sol";
-import { INftLiquidityConnector } from
-    "contracts/interfaces/INftLiquidityConnector.sol";
+import {
+    INftLiquidityConnector
+} from "contracts/interfaces/INftLiquidityConnector.sol";
 import {
     INftSettingsRegistry,
     NftKey
 } from "contracts/interfaces/INftSettingsRegistry.sol";
-import { INftTransferLib } from
-    "contracts/interfaces/libraries/INftTransferLib.sol";
+import {
+    INftTransferLib
+} from "contracts/interfaces/libraries/INftTransferLib.sol";
 import { IFeesLib } from "contracts/interfaces/libraries/IFeesLib.sol";
 import { ITransferLib } from "contracts/interfaces/libraries/ITransferLib.sol";
 import { ISwapLib } from "contracts/interfaces/libraries/ISwapLib.sol";
 import { INftZapLib } from "contracts/interfaces/libraries/INftZapLib.sol";
-import { INftSettingsLib } from
-    "contracts/interfaces/libraries/INftSettingsLib.sol";
-import { NftFarmStrategyEvents } from
-    "contracts/events/NftFarmStrategyEvents.sol";
+import {
+    INftSettingsLib
+} from "contracts/interfaces/libraries/INftSettingsLib.sol";
+import {
+    NftFarmStrategyEvents
+} from "contracts/events/NftFarmStrategyEvents.sol";
 import { INftAutomation } from "contracts/interfaces/INftAutomation.sol";
 import { NftZapIn } from "contracts/structs/NftZapStructs.sol";
+import {
+    NftAddLiquidity,
+    NftRemoveLiquidity
+} from "contracts/structs/NftLiquidityStructs.sol";
 import { Farm } from "contracts/structs/FarmStrategyStructs.sol";
 import {
     NftPosition,
@@ -44,10 +50,12 @@ import {
     NftHarvest,
     NftCompound,
     NftRebalance,
+    RebalancePriceBounds,
     NftMove,
     SimpleNftHarvest
 } from "contracts/structs/NftFarmStrategyStructs.sol";
 import { NftSettings } from "contracts/structs/NftSettingsStructs.sol";
+import { IShiftMath } from "contracts/interfaces/libraries/IShiftMath.sol";
 
 library NftFarmStrategyFees {
     bytes4 constant Deposit = bytes4(keccak256("FarmDepositFee"));
@@ -70,8 +78,14 @@ contract NftFarmStrategy is
     uint256 constant REBALANCE_MID_FEE_BPS = 3000; // 0.3%
 
     error PleaseUseIncrease();
+    error PleaseUseDeposit();
     error NftSupplyChanged();
     error NftSupplyDidntIncrease();
+    // Shift/rebalance/compound binding errors live at file scope in
+    // contracts/libraries/ShiftMath.sol so the library helpers can raise
+    // them and the strategy stays under EIP-170.
+    error InvalidTokenId();
+    error WithdrawPositionMismatch();
 
     struct Libraries {
         INftTransferLib nftTransferLib;
@@ -80,18 +94,18 @@ contract NftFarmStrategy is
         IFeesLib feesLib;
         INftZapLib nftZapLib;
         INftSettingsLib nftSettingsLib;
+        IShiftMath shiftMath;
     }
 
-    INftTransferLib public immutable nftTransferLib;
-    INftZapLib public immutable nftZapLib;
-    ISwapLib public immutable swapLib;
-    ITransferLib public immutable transferLib;
-    IFeesLib public immutable feesLib;
-    INftSettingsLib public immutable nftSettingsLib;
+    INftTransferLib private immutable nftTransferLib;
+    INftZapLib private immutable nftZapLib;
+    ISwapLib private immutable swapLib;
+    ITransferLib private immutable transferLib;
+    IFeesLib private immutable feesLib;
+    INftSettingsLib private immutable nftSettingsLib;
+    IShiftMath private immutable shiftMath;
 
     INftSettingsRegistry public immutable nftSettingsRegistry;
-
-    address public immutable strategyAddress;
 
     constructor(
         SickleFactory factory,
@@ -105,8 +119,8 @@ contract NftFarmStrategy is
         transferLib = libraries.transferLib;
         feesLib = libraries.feesLib;
         nftSettingsLib = libraries.nftSettingsLib;
+        shiftMath = libraries.shiftMath;
         nftSettingsRegistry = nftSettingsRegistry_;
-        strategyAddress = address(this);
     }
 
     /**
@@ -146,7 +160,9 @@ contract NftFarmStrategy is
 
         _depositNft(
             sickle,
-            NftPosition({ farm: params.farm, nft: params.nft, tokenId: tokenId }),
+            NftPosition({
+                farm: params.farm, nft: params.nft, tokenId: tokenId
+            }),
             params.increase.extraData
         );
 
@@ -237,7 +253,14 @@ contract NftFarmStrategy is
     ) external {
         Sickle sickle = getSickle(msg.sender);
 
-        _exit(sickle, position, harvestParams, withdrawParams, sweepTokens);
+        _exit(
+            sickle,
+            position,
+            harvestParams,
+            withdrawParams,
+            sweepTokens,
+            NftFarmStrategyFees.Harvest
+        );
     }
 
     /**
@@ -283,8 +306,8 @@ contract NftFarmStrategy is
         _zapIn(sickle, params.deposit.increase.zap);
 
         uint256 tokenId = INftLiquidityConnector(
-            connectorRegistry.connectorOf(address(params.position.nft))
-        ).getTokenId(address(params.position.nft), address(sickle));
+                connectorRegistry.connectorOf(address(params.deposit.nft))
+            ).getTokenId(address(params.deposit.nft), address(sickle));
 
         _depositNft(
             sickle,
@@ -345,12 +368,18 @@ contract NftFarmStrategy is
         bool inPlace, // Increase without withdrawing
         address[] calldata sweepTokens
     ) external payable nftSupplyUnchanged(position.nft) {
+        if (increaseParams.zap.addLiquidityParams.tokenId == 0) {
+            revert PleaseUseDeposit();
+        }
+
         Sickle sickle = getSickle(msg.sender);
 
-        if (!inPlace) {
+        if (!inPlace || _hasHarvestParams(harvestParams)) {
             _harvest(
                 sickle, position, harvestParams, NftFarmStrategyFees.Harvest
             );
+        }
+        if (!inPlace) {
             _withdrawNft(sickle, position, increaseParams.extraData);
         }
 
@@ -390,11 +419,13 @@ contract NftFarmStrategy is
     ) external nftSupplyUnchanged(position.nft) {
         Sickle sickle = getSickle(msg.sender);
 
-        if (!inPlace) {
+        if (!inPlace || _hasHarvestParams(harvestParams)) {
             _harvest(
                 sickle, position, harvestParams, NftFarmStrategyFees.Harvest
             );
+        }
 
+        if (!inPlace) {
             _withdrawNft(sickle, position, withdrawParams.extraData);
         }
 
@@ -524,6 +555,57 @@ contract NftFarmStrategy is
     /* Automation */
 
     /**
+     * @notice Adds vault-approved dust to an existing NFT position.
+     * Can only be called by the approved address on the Sickle.
+     * @param position The position details of the NFT to be increased.
+     * @param increaseParams The parameters for the increase.
+     * @param sweepTokens The tokens to be swept.
+     */
+    function depositFor(
+        Sickle sickle,
+        NftPosition calldata position,
+        NftIncrease calldata increaseParams,
+        address[] calldata sweepTokens
+    )
+        external
+        override
+        onlyApprovedFor(sickle)
+        nftSupplyUnchanged(position.nft)
+    {
+        nftSettingsRegistry.validateDepositFor(
+            NftKey({
+                sickle: sickle,
+                nftManager: position.nft,
+                tokenId: position.tokenId
+            })
+        );
+        NftAddLiquidity calldata addLp = increaseParams.zap.addLiquidityParams;
+        uint256 tokenId = addLp.tokenId;
+        if (tokenId == 0) {
+            revert PleaseUseDeposit();
+        }
+        // Both halves of the target must be bound: matching only the tokenId
+        // lets a validated (manager A, id X) fund (manager B, id X).
+        if (tokenId != position.tokenId || addLp.nft != position.nft) {
+            revert InvalidTokenId();
+        }
+
+        _transferInTokens(sickle, increaseParams);
+
+        _zapIn(sickle, increaseParams.zap);
+
+        _sweep(sickle, sweepTokens);
+
+        emit SickleIncreasedNft(
+            sickle,
+            position.nft,
+            position.tokenId,
+            position.farm.stakingContract,
+            position.farm.poolIndex
+        );
+    }
+
+    /**
      * @notice Harvests rewards from the NFT farm.
      * Can only be called by the approved address on the Sickle.
      * @param position The position details of the NFT to be harvested.
@@ -533,7 +615,7 @@ contract NftFarmStrategy is
         Sickle sickle,
         NftPosition calldata position,
         NftHarvest calldata params
-    ) external override onlyApproved(sickle) {
+    ) external override onlyApprovedFor(sickle) {
         nftSettingsRegistry.validateHarvestFor(
             NftKey({
                 sickle: sickle,
@@ -558,13 +640,16 @@ contract NftFarmStrategy is
         NftCompound calldata params,
         bool inPlace,
         address[] calldata sweepTokens
-    ) external override onlyApproved(sickle) {
+    ) external override onlyApprovedFor(sickle) {
         nftSettingsRegistry.validateCompoundFor(
             NftKey({
                 sickle: sickle,
                 nftManager: position.nft,
                 tokenId: position.tokenId
             })
+        );
+        shiftMath.checkCompoundTargetBindings(
+            sickle, position, params, connectorRegistry
         );
         _compound(
             sickle,
@@ -590,7 +675,7 @@ contract NftFarmStrategy is
         NftHarvest calldata harvestParams,
         NftWithdraw calldata withdrawParams,
         address[] calldata sweepTokens
-    ) external override onlyApproved(sickle) {
+    ) external override onlyApprovedFor(sickle) {
         nftSettingsRegistry.validateExitFor(
             NftKey({
                 sickle: sickle,
@@ -598,7 +683,26 @@ contract NftFarmStrategy is
                 tokenId: position.tokenId
             })
         );
-        _exit(sickle, position, harvestParams, withdrawParams, sweepTokens);
+        // The settings check above authorizes `position`, but the withdrawal
+        // parameters are supplied independently and zapOut() removes from
+        // whatever they name. Bind them, or consent to exit position A also
+        // permits removing liquidity from any other NFT the Sickle holds.
+        NftRemoveLiquidity calldata removeLp =
+            withdrawParams.zap.removeLiquidityParams;
+        if (
+            address(removeLp.nft) != address(position.nft)
+                || removeLp.tokenId != position.tokenId
+        ) {
+            revert WithdrawPositionMismatch();
+        }
+        _exit(
+            sickle,
+            position,
+            harvestParams,
+            withdrawParams,
+            sweepTokens,
+            NftFarmStrategyFees.HarvestFor
+        );
     }
 
     /**
@@ -611,18 +715,79 @@ contract NftFarmStrategy is
         Sickle sickle,
         NftRebalance calldata params,
         address[] calldata sweepTokens
-    ) external override onlyApproved(sickle) {
-        nftSettingsRegistry.validateRebalanceFor(
-            NftKey({
-                sickle: sickle,
-                nftManager: params.position.nft,
-                tokenId: params.position.tokenId
-            })
+    ) external override onlyApprovedFor(sickle) {
+        _rebalanceFor(sickle, params, sweepTokens, RebalancePriceBounds(0, 0));
+    }
+
+    /**
+     * @notice `rebalanceFor` for calldata that is only valid inside a pool
+     * price window. Keeper-built rebalances are computed for one pool
+     * price, and on narrow ranges a single trade between quote and
+     * inclusion leaves the add step's minimums unsatisfiable; checking the
+     * window before the harvest/withdraw/swap turns that ~1.5M gas revert
+     * into a ~250k one. See ShiftMath._checkRebalancePriceGuardInner.
+     * Can only be called by the approved address on the Sickle.
+     * @param params The parameters for the rebalance.
+     * @param sweepTokens The tokens to be swept.
+     * @param bounds The inclusive sqrtPriceX96 window the calldata was
+     * built for; both zero declares none.
+     */
+    function boundedRebalanceFor(
+        Sickle sickle,
+        NftRebalance calldata params,
+        address[] calldata sweepTokens,
+        RebalancePriceBounds calldata bounds
+    ) external override onlyApprovedFor(sickle) {
+        _rebalanceFor(sickle, params, sweepTokens, bounds);
+    }
+
+    function _rebalanceFor(
+        Sickle sickle,
+        NftRebalance calldata params,
+        address[] calldata sweepTokens,
+        RebalancePriceBounds memory bounds
+    ) private {
+        NftKey memory key = NftKey({
+            sickle: sickle,
+            nftManager: params.position.nft,
+            tokenId: params.position.tokenId
+        });
+
+        (
+            NftSettings memory settings,
+            bool isShift,
+            int24 expectedLower,
+            int24 expectedUpper
+        ) = shiftMath.preMintRebalanceChecks(
+            nftSettingsRegistry, key, params, bounds, connectorRegistry
         );
-        _rebalance(sickle, params, sweepTokens, NftFarmStrategyFees.HarvestFor);
+
+        uint256 newTokenId = _rebalance(
+            sickle, params, sweepTokens, NftFarmStrategyFees.HarvestFor
+        );
+
+        shiftMath.postMintRebalanceChecks(
+            key,
+            settings,
+            newTokenId,
+            isShift,
+            expectedLower,
+            expectedUpper,
+            connectorRegistry
+        );
     }
 
     /* Modifiers */
+
+    // `onlyApproved` inlines two external calls and two reverts at each of
+    // its five uses here. One function call instead keeps NftFarmStrategy
+    // under EIP-170.
+    modifier onlyApprovedFor(
+        Sickle sickle
+    ) {
+        _requireApproved(sickle);
+        _;
+    }
 
     modifier nftSupplyUnchanged(
         INonfungiblePositionManager nft
@@ -656,7 +821,7 @@ contract NftFarmStrategy is
         bytes4 fee
     ) private {
         if (params.swaps.length > 0) {
-            _claimAndSwap(sickle, position, params);
+            _claimAndSwap(sickle, position, params, fee);
         } else {
             _claim(sickle, position, params.harvest, fee);
         }
@@ -672,6 +837,14 @@ contract NftFarmStrategy is
             position.farm.stakingContract,
             position.farm.poolIndex
         );
+    }
+
+    function _hasHarvestParams(
+        NftHarvest calldata params
+    ) private pure returns (bool) {
+        // A harvest is a no-op without reward tokens to claim, so this is the
+        // only field that determines whether an in-place op should harvest.
+        return params.harvest.rewardTokens.length != 0;
     }
 
     function _simpleHarvest(
@@ -728,9 +901,10 @@ contract NftFarmStrategy is
         NftPosition calldata position,
         NftHarvest calldata harvestParams,
         NftWithdraw calldata withdrawParams,
-        address[] calldata sweepTokens
+        address[] calldata sweepTokens,
+        bytes4 harvestFee
     ) private {
-        _harvest(sickle, position, harvestParams, NftFarmStrategyFees.Harvest);
+        _harvest(sickle, position, harvestParams, harvestFee);
 
         _withdraw(
             sickle, position, withdrawParams, NftFarmStrategyFees.Withdraw
@@ -747,12 +921,15 @@ contract NftFarmStrategy is
         );
     }
 
+    // Returns the newly-minted tokenId so rebalanceFor can do post-mint
+    // verification after gauge-style _depositNft transfers the NFT out of
+    // the Sickle. Manual rebalance() discards the return.
     function _rebalance(
         Sickle sickle,
         NftRebalance calldata params,
         address[] calldata sweepTokens,
         bytes4 harvestFee
-    ) private {
+    ) private returns (uint256 newTokenId) {
         _harvest(sickle, params.position, params.harvest, harvestFee);
 
         _withdraw(
@@ -768,7 +945,7 @@ contract NftFarmStrategy is
 
         _resetNftSettings(sickle, params.position.nft, params.position.tokenId);
 
-        uint256 tokenId = INftLiquidityConnector(
+        newTokenId = INftLiquidityConnector(
             connectorRegistry.connectorOf(address(params.position.nft))
         ).getTokenId(address(params.position.nft), address(sickle));
 
@@ -777,7 +954,7 @@ contract NftFarmStrategy is
             NftPosition({
                 farm: params.position.farm,
                 nft: params.position.nft,
-                tokenId: tokenId
+                tokenId: newTokenId
             }),
             params.increase.extraData
         );
@@ -809,10 +986,26 @@ contract NftFarmStrategy is
         targets[0] = address(transferLib);
         data[0] = abi.encodeCall(
             ITransferLib.transferTokensFromUser,
-            (params.tokensIn, params.amountsIn, strategyAddress, fee)
+            (params.tokensIn, params.amountsIn, address(this), fee)
         );
 
         sickle.multicall{ value: msg.value }(targets, data);
+    }
+
+    // Wraps the single-target sickle.multicall pattern. The strategy issues
+    // this shape ~9 times; deduplicating the array-construction code costs
+    // ~50 bytes per call site to save the ~80-120 byte inline expansion,
+    // keeping NftFarmStrategy under EIP-170.
+    function _singleMulticall(
+        Sickle sickle,
+        address target,
+        bytes memory data
+    ) private {
+        address[] memory targets = new address[](1);
+        bytes[] memory dataArr = new bytes[](1);
+        targets[0] = target;
+        dataArr[0] = data;
+        sickle.multicall(targets, dataArr);
     }
 
     function _transferInNft(
@@ -820,15 +1013,13 @@ contract NftFarmStrategy is
         INonfungiblePositionManager nft,
         uint256 tokenId
     ) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        targets[0] = address(nftTransferLib);
-        data[0] = abi.encodeCall(
-            INftTransferLib.transferErc721FromUser, (nft, tokenId)
+        _singleMulticall(
+            sickle,
+            address(nftTransferLib),
+            abi.encodeCall(
+                INftTransferLib.transferErc721FromUser, (nft, tokenId)
+            )
         );
-
-        sickle.multicall(targets, data);
     }
 
     function _transferOutNft(
@@ -836,14 +1027,13 @@ contract NftFarmStrategy is
         INonfungiblePositionManager nft,
         uint256 tokenId
     ) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        targets[0] = address(nftTransferLib);
-        data[0] =
-            abi.encodeCall(INftTransferLib.transferErc721ToUser, (nft, tokenId));
-
-        sickle.multicall(targets, data);
+        _singleMulticall(
+            sickle,
+            address(nftTransferLib),
+            abi.encodeCall(
+                INftTransferLib.transferErc721ToUser, (nft, tokenId)
+            )
+        );
     }
 
     function _depositNft(
@@ -851,18 +1041,13 @@ contract NftFarmStrategy is
         NftPosition memory position,
         bytes calldata extraData
     ) private {
-        address farmConnector =
-            connectorRegistry.connectorOf(position.farm.stakingContract);
-
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        targets[0] = farmConnector;
-        data[0] = abi.encodeCall(
-            INftFarmConnector.depositExistingNft, (position, extraData)
+        _singleMulticall(
+            sickle,
+            connectorRegistry.connectorOf(position.farm.stakingContract),
+            abi.encodeCall(
+                INftFarmConnector.depositExistingNft, (position, extraData)
+            )
         );
-
-        sickle.multicall(targets, data);
 
         emit SickleDepositedNft(
             sickle,
@@ -878,17 +1063,13 @@ contract NftFarmStrategy is
         NftPosition calldata position,
         bytes calldata extraData
     ) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        address farmConnector =
-            connectorRegistry.connectorOf(position.farm.stakingContract);
-
-        targets[0] = farmConnector;
-        data[0] =
-            abi.encodeCall(INftFarmConnector.withdrawNft, (position, extraData));
-
-        sickle.multicall(targets, data);
+        _singleMulticall(
+            sickle,
+            connectorRegistry.connectorOf(position.farm.stakingContract),
+            abi.encodeCall(
+                INftFarmConnector.withdrawNft, (position, extraData)
+            )
+        );
 
         emit SickleWithdrewNft(
             sickle,
@@ -903,7 +1084,8 @@ contract NftFarmStrategy is
     function _claimAndSwap(
         Sickle sickle,
         NftPosition calldata position,
-        NftHarvest calldata params
+        NftHarvest calldata params,
+        bytes4 fee
     ) private {
         address farmConnector =
             connectorRegistry.connectorOf(position.farm.stakingContract);
@@ -928,8 +1110,7 @@ contract NftFarmStrategy is
 
         targets[2] = address(feesLib);
         data[2] = abi.encodeCall(
-            IFeesLib.chargeFees,
-            (strategyAddress, NftFarmStrategyFees.Harvest, params.outputTokens)
+            IFeesLib.chargeFees, (address(this), fee, params.outputTokens)
         );
         sickle.multicall(targets, data);
     }
@@ -961,20 +1142,18 @@ contract NftFarmStrategy is
 
         targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
-            IFeesLib.chargeFees, (strategyAddress, fee, params.rewardTokens)
+            IFeesLib.chargeFees, (address(this), fee, params.rewardTokens)
         );
 
         sickle.multicall(targets, data);
     }
 
     function _zapIn(Sickle sickle, NftZapIn calldata zap) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        targets[0] = address(nftZapLib);
-        data[0] = abi.encodeCall(INftZapLib.zapIn, (zap));
-
-        sickle.multicall(targets, data);
+        _singleMulticall(
+            sickle,
+            address(nftZapLib),
+            abi.encodeCall(INftZapLib.zapIn, (zap))
+        );
     }
 
     function _zapOut(
@@ -991,7 +1170,7 @@ contract NftFarmStrategy is
         targets[1] = address(feesLib);
         data[1] = abi.encodeCall(
             IFeesLib.chargeFees,
-            (strategyAddress, withdrawalFee, params.tokensOut)
+            (address(this), withdrawalFee, params.tokensOut)
         );
 
         sickle.multicall(targets, data);
@@ -1003,16 +1182,14 @@ contract NftFarmStrategy is
         uint256 tokenId,
         NftSettings calldata settings
     ) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        targets[0] = address(nftSettingsLib);
-        data[0] = abi.encodeCall(
-            INftSettingsLib.setNftSettings,
-            (nftSettingsRegistry, nft, tokenId, settings)
+        _singleMulticall(
+            sickle,
+            address(nftSettingsLib),
+            abi.encodeCall(
+                INftSettingsLib.setNftSettings,
+                (nftSettingsRegistry, nft, tokenId, settings)
+            )
         );
-
-        sickle.multicall(targets, data);
     }
 
     function _resetNftSettings(
@@ -1020,33 +1197,35 @@ contract NftFarmStrategy is
         INonfungiblePositionManager nft,
         uint256 tokenId
     ) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-
-        targets[0] = address(nftSettingsLib);
-        data[0] = abi.encodeCall(
-            INftSettingsLib.transferNftSettings,
-            (nftSettingsRegistry, nft, tokenId)
+        _singleMulticall(
+            sickle,
+            address(nftSettingsLib),
+            abi.encodeCall(
+                INftSettingsLib.transferNftSettings,
+                (
+                    nftSettingsRegistry,
+                    nft,
+                    tokenId,
+                    shiftMath,
+                    connectorRegistry
+                )
+            )
         );
-
-        sickle.multicall(targets, data);
     }
 
     function _sweep(Sickle sickle, address[] calldata sweepTokens) private {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-        targets[0] = address(transferLib);
-        data[0] =
-            abi.encodeCall(ITransferLib.transferTokensToUser, (sweepTokens));
-
-        sickle.multicall(targets, data);
+        _singleMulticall(
+            sickle,
+            address(transferLib),
+            abi.encodeCall(ITransferLib.transferTokensToUser, (sweepTokens))
+        );
     }
 
     function _getRebalanceFee(
         INonfungiblePositionManager nft,
         IUniswapV3Pool pool,
         uint256 tokenId
-    ) internal view returns (bytes4) {
+    ) internal view virtual returns (bytes4) {
         INftLiquidityConnector liquidityConnector =
             INftLiquidityConnector(connectorRegistry.connectorOf(address(nft)));
         uint24 fee = liquidityConnector.fee(address(pool), tokenId);

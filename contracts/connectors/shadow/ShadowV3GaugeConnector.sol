@@ -28,12 +28,12 @@ contract ShadowV3GaugeConnector is INftFarmConnector, ShadowV3GaugeClaim {
     function depositExistingNft(
         NftPosition calldata,
         bytes calldata // extraData
-    ) external payable { }
+    ) external { }
 
     function withdrawNft(
         NftPosition calldata,
         bytes calldata // extraData
-    ) external payable { }
+    ) external { }
     // Payable in case an NFT is withdrawn to be increased with ETH
 
     function claim(
@@ -42,7 +42,7 @@ contract ShadowV3GaugeConnector is INftFarmConnector, ShadowV3GaugeClaim {
         uint128 amount0Max,
         uint128 amount1Max,
         bytes calldata extraData
-    ) external payable {
+    ) external {
         ShadowClaimExtraData memory extra =
             abi.decode(extraData, (ShadowClaimExtraData));
         try IShadowNonfungiblePositionManager(address(position.nft)).getReward(
@@ -76,10 +76,12 @@ contract ShadowV3GaugeConnector is INftFarmConnector, ShadowV3GaugeClaim {
         address,
         NftPosition calldata
     ) external view virtual override returns (bool) {
-        return true; // Shadow positions are staked by default
+        return false; // Shadow positions stay in the Gauge while earning
+            // rewards
     }
 
     function earned(
+        address, // user
         NftPosition calldata position,
         address[] memory rewardTokens
     ) external view virtual override returns (uint256[] memory) {

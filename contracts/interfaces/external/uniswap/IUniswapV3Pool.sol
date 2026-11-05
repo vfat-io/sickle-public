@@ -129,7 +129,9 @@ interface IUniswapV3PoolState {
     /// In addition, these values are only relative and must be used only in
     /// comparison to previous snapshots for
     /// a specific position.
-    function ticks(int24 tick)
+    function ticks(
+        int24 tick
+    )
         external
         view
         returns (
@@ -145,7 +147,9 @@ interface IUniswapV3PoolState {
 
     /// @notice Returns 256 packed tick initialized boolean values. See
     /// TickBitmap for more information
-    function tickBitmap(int16 wordPosition) external view returns (uint256);
+    function tickBitmap(
+        int16 wordPosition
+    ) external view returns (uint256);
 
     /// @notice Returns the information about a position by the position's key
     /// @param key The position's key is a hash of a preimage composed by the
@@ -159,7 +163,9 @@ interface IUniswapV3PoolState {
     /// as of the last mint/burn/poke,
     /// @return tokensOwed1 the computed amount of token1 owed to the position
     /// as of the last mint/burn/poke
-    function positions(bytes32 key)
+    function positions(
+        bytes32 key
+    )
         external
         view
         returns (
@@ -182,7 +188,9 @@ interface IUniswapV3PoolState {
     /// liquidity for the life of the pool as of the observation timestamp,
     /// @return initialized whether the observation has been initialized and the
     /// values are safe to use
-    function observations(uint256 index)
+    function observations(
+        uint256 index
+    )
         external
         view
         returns (
@@ -190,6 +198,16 @@ interface IUniswapV3PoolState {
             int56 tickCumulative,
             uint160 secondsPerLiquidityCumulativeX128,
             bool initialized
+        );
+
+    function observe(
+        uint32[] calldata secondsAgos
+    )
+        external
+        view
+        returns (
+            int56[] memory tickCumulatives,
+            uint160[] memory secondsPerLiquidityCumulativeX128s
         );
 }
 
@@ -200,4 +218,12 @@ interface IUniswapV3Pool is IUniswapV3PoolImmutables, IUniswapV3PoolState {
         uint256 amount1,
         bytes calldata data
     ) external;
+
+    function swap(
+        address recipient,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1);
 }

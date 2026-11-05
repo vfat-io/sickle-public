@@ -19,7 +19,9 @@ interface EIP20NonStandardInterface {
      * @param owner The address from which the balance will be retrieved
      * @return balance The balance
      */
-    function balanceOf(address owner) external view returns (uint256 balance);
+    function balanceOf(
+        address owner
+    ) external view returns (uint256 balance);
 
     ///
     /// !!!!!!!!!!!!!!

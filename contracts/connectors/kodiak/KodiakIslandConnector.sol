@@ -6,8 +6,7 @@ import { IKodiakIslandPool } from
 import {
     ILiquidityConnector,
     AddLiquidityParams,
-    RemoveLiquidityParams,
-    SwapParams
+    RemoveLiquidityParams
 } from "contracts/interfaces/ILiquidityConnector.sol";
 
 struct KodiakIslandMintExtraData {
@@ -19,7 +18,7 @@ contract KodiakIslandConnector is ILiquidityConnector {
 
     function addLiquidity(
         AddLiquidityParams memory addLiquidityParams
-    ) external payable override {
+    ) external override {
         KodiakIslandMintExtraData memory extraData = abi.decode(
             addLiquidityParams.extraData, (KodiakIslandMintExtraData)
         );
@@ -34,12 +33,6 @@ contract KodiakIslandConnector is ILiquidityConnector {
         IKodiakIslandPool(removeLiquidityParams.lpToken).burn(
             removeLiquidityParams.lpAmountIn, address(this)
         );
-    }
-
-    function swapExactTokensForTokens(
-        SwapParams memory
-    ) external payable override {
-        revert NotSupported();
     }
 
     function getPoolPrice(
